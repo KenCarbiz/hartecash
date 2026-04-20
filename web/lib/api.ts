@@ -239,6 +239,39 @@ export async function listInteractions(leadId: number): Promise<Interaction[]> {
   return (await res.json()) as Interaction[];
 }
 
+// ---------- valuation ----------
+
+export interface MarketEstimate {
+  sample_size: number;
+  median: number | null;
+  p25: number | null;
+  p75: number | null;
+  listing_price: number | null;
+  delta_pct: number | null;
+  verdict: "below" | "at" | "above" | "unknown";
+}
+
+export async function getMarketEstimate(listingId: number): Promise<MarketEstimate | null> {
+  const res = await fetch(buildUrl(`/listings/${listingId}/market`), {
+    cache: "no-store",
+  });
+  if (!res.ok) return null;
+  return (await res.json()) as MarketEstimate;
+}
+
+export async function bulkClaim(
+  listingIds: number[],
+  assignedTo?: string,
+): Promise<{ claimed: number; already_claimed: number; missing_listings: number[] }> {
+  const res = await fetch(buildUrl("/leads/bulk-claim"), {
+    method: "POST",
+    headers: crmHeaders(),
+    body: JSON.stringify({ listing_ids: listingIds, assigned_to: assignedTo ?? null }),
+  });
+  if (!res.ok) throw new FsboApiError(`FSBO API ${res.status}`, res.status, await res.text());
+  return await res.json();
+}
+
 // ---------- duplicates ----------
 
 export interface DuplicateRow {

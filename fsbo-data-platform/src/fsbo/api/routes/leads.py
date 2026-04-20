@@ -121,6 +121,58 @@ def create_lead(
     return LeadOut.model_validate(lead)
 
 
+class BulkClaimIn(BaseModel):
+    listing_ids: list[int]
+    assigned_to: str | None = None
+
+
+class BulkClaimOut(BaseModel):
+    claimed: int
+    already_claimed: int
+    missing_listings: list[int]
+
+
+@router.post("/leads/bulk-claim", response_model=BulkClaimOut)
+def bulk_claim(
+    payload: BulkClaimIn,
+    dealer_id: DealerIdHeader,
+    db: Annotated[Session, Depends(get_session)],
+) -> BulkClaimOut:
+    if not payload.listing_ids:
+        return BulkClaimOut(claimed=0, already_claimed=0, missing_listings=[])
+
+    ids = list({*payload.listing_ids})[:200]  # cap per request
+
+    found_ids = set(
+        db.scalars(select(Listing.id).where(Listing.id.in_(ids))).all()
+    )
+    missing = [i for i in ids if i not in found_ids]
+
+    already = set(
+        db.scalars(
+            select(Lead.listing_id).where(
+                Lead.dealer_id == dealer_id, Lead.listing_id.in_(found_ids)
+            )
+        ).all()
+    )
+    to_claim = found_ids - already
+    for listing_id in to_claim:
+        db.add(
+            Lead(
+                dealer_id=dealer_id,
+                listing_id=listing_id,
+                assigned_to=payload.assigned_to,
+            )
+        )
+    db.flush()
+
+    return BulkClaimOut(
+        claimed=len(to_claim),
+        already_claimed=len(already),
+        missing_listings=missing,
+    )
+
+
 @router.get("/leads", response_model=list[LeadWithListing])
 def list_leads(
     dealer_id: DealerIdHeader,

@@ -3,12 +3,14 @@ import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/AppShell";
 import { ComposePanel } from "@/components/ComposePanel";
 import { LeadPanel } from "@/components/LeadPanel";
+import { MarketBadge } from "@/components/MarketBadge";
 import {
   formatMileage,
   formatPrice,
   formatRelativeDate,
   getLeadForListing,
   getListing,
+  getMarketEstimate,
   listDuplicates,
   listInteractions,
   listTemplates,
@@ -49,6 +51,7 @@ export default async function ListingDetailPage({
   const interactions = lead ? await listInteractions(lead.id).catch(() => []) : [];
   const templates = await listTemplates().catch(() => []);
   const duplicates = await listDuplicates(listingId).catch(() => []);
+  const market = await getMarketEstimate(listingId).catch(() => null);
 
   const vehicleLine = [listing.year, listing.make, listing.model, listing.trim]
     .filter(Boolean)
@@ -204,7 +207,8 @@ export default async function ListingDetailPage({
         </div>
 
         <div className="lg:col-span-1 space-y-3">
-          <h2 className="text-sm font-semibold text-ink-700">Lead workspace</h2>
+          <MarketBadge estimate={market} />
+          <h2 className="text-sm font-semibold text-ink-700 pt-1">Lead workspace</h2>
           <LeadPanel listingId={listing.id} lead={lead} interactions={interactions} />
           {lead && (
             <ComposePanel

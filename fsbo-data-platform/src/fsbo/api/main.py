@@ -8,6 +8,7 @@ from fsbo.api.routes import (
     listings,
     saved_searches,
     templates,
+    valuation,
     webhooks,
 )
 from fsbo.logging import configure
@@ -27,6 +28,7 @@ app.include_router(ai.router)
 app.include_router(activity.router)
 app.include_router(extension_ingest.router)
 app.include_router(saved_searches.router)
+app.include_router(valuation.router)
 
 
 @app.get("/health")

@@ -1,27 +1,17 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/AppShell";
 import { FilterBar } from "@/components/FilterBar";
+import { ListingsTable } from "@/components/ListingsTable";
 import { SavedSearches } from "@/components/SavedSearches";
 import {
   type Classification,
   type ListingsQuery,
   FsboApiError,
-  formatMileage,
-  formatPrice,
-  formatRelativeDate,
   listListings,
   listSavedSearches,
 } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
-
-const CLASS_BADGE: Record<string, string> = {
-  private_seller: "bg-emerald-100 text-emerald-800",
-  dealer: "bg-amber-100 text-amber-800",
-  scam: "bg-rose-100 text-rose-800",
-  uncertain: "bg-ink-100 text-ink-700",
-  unclassified: "bg-ink-100 text-ink-600",
-};
 
 function parseQuery(searchParams: Record<string, string | string[] | undefined>): ListingsQuery {
   const s = (k: string) => {
@@ -107,65 +97,8 @@ export default async function ListingsPage({
           No listings match your filters. Try widening the criteria.
         </div>
       ) : (
-        <div className="panel mt-4 overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-ink-50 text-xs uppercase tracking-wide text-ink-500">
-              <tr>
-                <th className="text-left font-medium px-4 py-2.5">Vehicle</th>
-                <th className="text-left font-medium px-4 py-2.5">Location</th>
-                <th className="text-right font-medium px-4 py-2.5">Mileage</th>
-                <th className="text-right font-medium px-4 py-2.5">Price</th>
-                <th className="text-left font-medium px-4 py-2.5">Source</th>
-                <th className="text-left font-medium px-4 py-2.5">Class</th>
-                <th className="text-right font-medium px-4 py-2.5">Posted</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-ink-200">
-              {page.items.map((l) => {
-                const vehicle =
-                  [l.year, l.make, l.model].filter(Boolean).join(" ") || l.title || "—";
-                const loc =
-                  [l.city, l.state].filter(Boolean).join(", ") || l.zip_code || "—";
-                return (
-                  <tr key={l.id} className="hover:bg-ink-50">
-                    <td className="px-4 py-3">
-                      <Link
-                        href={`/listings/${l.id}`}
-                        className="block font-medium text-ink-900 hover:text-brand-600"
-                      >
-                        {vehicle}
-                      </Link>
-                      {l.title && l.title !== vehicle && (
-                        <p className="mt-0.5 truncate text-xs text-ink-500 max-w-md">
-                          {l.title}
-                        </p>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-ink-700">{loc}</td>
-                    <td className="px-4 py-3 text-right tabular text-ink-700">
-                      {formatMileage(l.mileage)}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular font-semibold">
-                      {formatPrice(l.price)}
-                    </td>
-                    <td className="px-4 py-3 text-ink-600">{l.source}</td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`badge ${
-                          CLASS_BADGE[l.classification] ?? CLASS_BADGE.unclassified
-                        }`}
-                      >
-                        {l.classification.replace("_", " ")}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right text-xs text-ink-500 tabular">
-                      {formatRelativeDate(l.posted_at ?? l.first_seen_at)}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <div className="mt-4">
+          <ListingsTable listings={page.items} />
         </div>
       )}
 
