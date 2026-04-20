@@ -239,6 +239,66 @@ export async function listInteractions(leadId: number): Promise<Interaction[]> {
   return (await res.json()) as Interaction[];
 }
 
+// ---------- duplicates ----------
+
+export interface DuplicateRow {
+  id: number;
+  source: string;
+  url: string;
+  posted_at: string | null;
+  dedup_key: string | null;
+}
+
+export async function listDuplicates(listingId: number): Promise<DuplicateRow[]> {
+  const res = await fetch(buildUrl(`/listings/${listingId}/duplicates`), {
+    cache: "no-store",
+  });
+  if (!res.ok) return [];
+  return (await res.json()) as DuplicateRow[];
+}
+
+// ---------- saved searches ----------
+
+export interface SavedSearch {
+  id: number;
+  dealer_id: string;
+  name: string;
+  query: Record<string, unknown>;
+  alerts_enabled: boolean;
+  last_run_at: string | null;
+  created_at: string;
+}
+
+export async function listSavedSearches(): Promise<SavedSearch[]> {
+  const res = await fetch(buildUrl("/saved-searches"), {
+    headers: crmHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new FsboApiError(`FSBO API ${res.status}`, res.status, await res.text());
+  return (await res.json()) as SavedSearch[];
+}
+
+export async function createSavedSearch(
+  name: string,
+  query: Record<string, unknown>,
+  alertsEnabled = false,
+): Promise<SavedSearch> {
+  const res = await fetch(buildUrl("/saved-searches"), {
+    method: "POST",
+    headers: crmHeaders(),
+    body: JSON.stringify({ name, query, alerts_enabled: alertsEnabled }),
+  });
+  if (!res.ok) throw new FsboApiError(`FSBO API ${res.status}`, res.status, await res.text());
+  return (await res.json()) as SavedSearch;
+}
+
+export async function deleteSavedSearch(id: number): Promise<void> {
+  await fetch(buildUrl(`/saved-searches/${id}`), {
+    method: "DELETE",
+    headers: crmHeaders(),
+  });
+}
+
 // ---------- templates ----------
 
 export interface MessageTemplate {

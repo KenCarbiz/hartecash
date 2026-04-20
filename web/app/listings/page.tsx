@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/AppShell";
 import { FilterBar } from "@/components/FilterBar";
+import { SavedSearches } from "@/components/SavedSearches";
 import {
   type Classification,
   type ListingsQuery,
@@ -9,6 +10,7 @@ import {
   formatPrice,
   formatRelativeDate,
   listListings,
+  listSavedSearches,
 } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
@@ -66,6 +68,8 @@ export default async function ListingsPage({
     page = { items: [], total: 0, limit: query.limit ?? 50, offset: query.offset ?? 0 };
   }
 
+  const saved = await listSavedSearches().catch(() => []);
+
   const limit = query.limit ?? 50;
   const offset = query.offset ?? 0;
   const nextOffset = offset + limit;
@@ -89,6 +93,7 @@ export default async function ListingsPage({
         }–${Math.min(offset + page.items.length, page.total)}`}
       />
 
+      <SavedSearches saved={saved} currentQuery={query} />
       <FilterBar current={query} />
 
       {error && (

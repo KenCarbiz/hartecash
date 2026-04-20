@@ -187,6 +187,25 @@ class Interaction(Base):
     )
 
 
+class SavedSearch(Base):
+    """Dealer-scoped saved filter set for quickly re-running + alerting on."""
+
+    __tablename__ = "saved_searches"
+    __table_args__ = (
+        UniqueConstraint("dealer_id", "name", name="uq_search_dealer_name"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    dealer_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    query: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    alerts_enabled: Mapped[bool] = mapped_column(default=False, nullable=False)
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class MessageTemplate(Base):
     """Reusable outreach message, scoped to a dealer. Supports {{placeholders}}
     that get filled from the listing context when rendered.

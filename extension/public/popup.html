@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>AutoCurb</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
+        color: #0f172a;
+        background: #f8fafc;
+        width: 280px;
+        padding: 14px 16px 16px;
+      }
+      h1 {
+        font-size: 14px;
+        margin: 0 0 10px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .logo {
+        width: 20px;
+        height: 20px;
+        background: #4f46e5;
+        color: #fff;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        border-radius: 4px;
+        font-size: 12px;
+      }
+      label {
+        display: block;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: #64748b;
+        margin-top: 10px;
+        margin-bottom: 3px;
+      }
+      input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 6px 8px;
+        border: 1px solid #cbd5e1;
+        border-radius: 5px;
+        font-size: 12px;
+      }
+      button {
+        margin-top: 14px;
+        width: 100%;
+        padding: 8px;
+        background: #4f46e5;
+        color: #fff;
+        border: 0;
+        border-radius: 6px;
+        font-weight: 500;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      button:hover {
+        background: #4338ca;
+      }
+      .hint {
+        margin-top: 10px;
+        font-size: 11px;
+        color: #94a3b8;
+      }
+      .saved {
+        margin-top: 10px;
+        font-size: 11px;
+        color: #059669;
+      }
+    </style>
+  </head>
+  <body>
+    <h1><span class="logo">A</span> AutoCurb settings</h1>
+
+    <label for="apiUrl">API URL</label>
+    <input id="apiUrl" type="url" placeholder="http://localhost:8000" />
+
+    <label for="dealerId">Dealer ID</label>
+    <input id="dealerId" type="text" placeholder="demo-dealer" />
+
+    <label for="userLabel">Your name / handle</label>
+    <input id="userLabel" type="text" placeholder="me" />
+
+    <button id="save">Save settings</button>
+    <p class="hint">
+      The extension overlays AutoCurb tools on Facebook Marketplace and Craigslist
+      listings. It runs in your own browser session — no credentials are stored.
+    </p>
+    <p id="saved" class="saved" style="display: none">✓ Saved</p>
+
+    <script type="module">
+      const els = {
+        apiUrl: document.getElementById("apiUrl"),
+        dealerId: document.getElementById("dealerId"),
+        userLabel: document.getElementById("userLabel"),
+        save: document.getElementById("save"),
+        saved: document.getElementById("saved"),
+      };
+      const DEFAULTS = {
+        apiUrl: "http://localhost:8000",
+        dealerId: "demo-dealer",
+        userLabel: "me",
+      };
+      const stored = await chrome.storage.local.get(DEFAULTS);
+      els.apiUrl.value = stored.apiUrl;
+      els.dealerId.value = stored.dealerId;
+      els.userLabel.value = stored.userLabel;
+
+      els.save.addEventListener("click", async () => {
+        await chrome.storage.local.set({
+          apiUrl: els.apiUrl.value || DEFAULTS.apiUrl,
+          dealerId: els.dealerId.value || DEFAULTS.dealerId,
+          userLabel: els.userLabel.value || DEFAULTS.userLabel,
+        });
+        els.saved.style.display = "block";
+        setTimeout(() => (els.saved.style.display = "none"), 1500);
+      });
+    </script>
+  </body>
+</html>

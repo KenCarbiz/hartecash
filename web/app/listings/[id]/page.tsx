@@ -9,6 +9,7 @@ import {
   formatRelativeDate,
   getLeadForListing,
   getListing,
+  listDuplicates,
   listInteractions,
   listTemplates,
 } from "@/lib/api";
@@ -47,6 +48,7 @@ export default async function ListingDetailPage({
   const lead = await getLeadForListing(listingId).catch(() => null);
   const interactions = lead ? await listInteractions(lead.id).catch(() => []) : [];
   const templates = await listTemplates().catch(() => []);
+  const duplicates = await listDuplicates(listingId).catch(() => []);
 
   const vehicleLine = [listing.year, listing.make, listing.model, listing.trim]
     .filter(Boolean)
@@ -155,6 +157,48 @@ export default async function ListingDetailPage({
                 <h2 className="text-sm font-semibold">Classifier reasoning</h2>
               </div>
               <p className="px-5 py-4 text-sm text-ink-700">{listing.classification_reason}</p>
+            </div>
+          )}
+
+          {duplicates.length > 0 && (
+            <div className="panel">
+              <div className="panel-header flex items-center justify-between">
+                <div>
+                  <h2 className="text-sm font-semibold">Also posted on</h2>
+                  <p className="text-[11px] text-ink-500 mt-0.5">
+                    Same vehicle listed across {duplicates.length + 1} sources — same VIN or seller phone.
+                  </p>
+                </div>
+                <span className="badge bg-brand-100 text-brand-700">
+                  {duplicates.length} match{duplicates.length === 1 ? "" : "es"}
+                </span>
+              </div>
+              <ul className="divide-y divide-ink-200">
+                {duplicates.map((d) => (
+                  <li key={d.id} className="flex items-center justify-between px-5 py-3 text-sm">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="badge bg-ink-100 text-ink-700">{d.source}</span>
+                      <Link
+                        href={`/listings/${d.id}`}
+                        className="truncate text-ink-900 hover:text-brand-600"
+                      >
+                        Listing #{d.id}
+                      </Link>
+                    </div>
+                    <div className="flex items-center gap-3 text-xs text-ink-500">
+                      <span className="tabular">{formatRelativeDate(d.posted_at)}</span>
+                      <a
+                        href={d.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-brand-600 hover:text-brand-700"
+                      >
+                        source ↗
+                      </a>
+                    </div>
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
         </div>

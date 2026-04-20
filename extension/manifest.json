@@ -1,0 +1,45 @@
+{
+  "manifest_version": 3,
+  "name": "AutoCurb — FSBO Buyer Tools",
+  "short_name": "AutoCurb",
+  "version": "0.1.0",
+  "description": "Augments Facebook Marketplace, Craigslist, and other FSBO sites with AutoCurb acquisition tools.",
+  "permissions": ["storage", "activeTab", "scripting"],
+  "host_permissions": [
+    "https://www.facebook.com/*",
+    "https://*.craigslist.org/*",
+    "https://offerup.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.facebook.com/marketplace/*"],
+      "js": ["content-facebook.js"],
+      "css": ["overlay.css"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://*.craigslist.org/*/cto/*", "https://*.craigslist.org/*/ctd/*"],
+      "js": ["content-craigslist.js"],
+      "css": ["overlay.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "AutoCurb",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

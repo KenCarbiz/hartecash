@@ -1,6 +1,15 @@
 from fastapi import FastAPI
 
-from fsbo.api.routes import activity, ai, leads, listings, templates, webhooks
+from fsbo.api.routes import (
+    activity,
+    ai,
+    extension_ingest,
+    leads,
+    listings,
+    saved_searches,
+    templates,
+    webhooks,
+)
 from fsbo.logging import configure
 
 configure()
@@ -16,6 +25,8 @@ app.include_router(leads.router)
 app.include_router(templates.router)
 app.include_router(ai.router)
 app.include_router(activity.router)
+app.include_router(extension_ingest.router)
+app.include_router(saved_searches.router)
 
 
 @app.get("/health")
