@@ -4,11 +4,13 @@ from fsbo.api.routes import (
     activity,
     admin,
     ai,
+    api_keys,
     extension_ingest,
     leads,
     listings,
     messages,
     saved_searches,
+    source_health,
     templates,
     valuation,
     webhooks,
@@ -33,6 +35,8 @@ app.include_router(saved_searches.router)
 app.include_router(valuation.router)
 app.include_router(admin.router)
 app.include_router(messages.router)
+app.include_router(source_health.router)
+app.include_router(api_keys.router)
 
 
 @app.get("/health")
@@ -40,7 +44,7 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.get("/sources")
+@app.get("/sources/registered")
 def sources() -> dict[str, list[str]]:
     from fsbo.sources import REGISTRY
 

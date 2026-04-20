@@ -150,6 +150,26 @@ class WebhookSubscription(Base):
     )
 
 
+class ApiKey(Base):
+    """Dealer-scoped API key. Used by the browser extension and any other
+    programmatic integrations. The token is stored as a SHA-256 hash; only
+    the prefix is retained in plaintext for UX ("ac_live_abc…")."""
+
+    __tablename__ = "api_keys"
+    __table_args__ = (Index("ix_api_keys_token_hash", "token_hash", unique=True),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    dealer_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    token_prefix: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class Message(Base):
     """Outbound/inbound SMS tied to a lead. Wraps Twilio's Message resource."""
 

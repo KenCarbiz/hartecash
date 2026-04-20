@@ -20,6 +20,7 @@ from dateutil import parser as dateparser
 
 from fsbo.logging import get_logger
 from fsbo.sources.base import NormalizedListing, Source
+from fsbo.sources.rate_limit import throttle
 
 log = get_logger(__name__)
 
@@ -68,6 +69,7 @@ class CraigslistSource(Source):
         url = f"https://{city}.craigslist.org/search/{category}"
         log.info("craigslist.fetch", city=city, category=category, params=params)
 
+        await throttle("craigslist")
         resp = await self._client.get(url, params=params)
         resp.raise_for_status()
         feed = feedparser.parse(resp.text)

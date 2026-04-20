@@ -29,6 +29,7 @@ from bs4 import BeautifulSoup
 from fsbo.config import settings
 from fsbo.logging import get_logger
 from fsbo.sources.base import NormalizedListing, Source
+from fsbo.sources.rate_limit import throttle
 
 log = get_logger(__name__)
 
@@ -83,6 +84,7 @@ class OfferUpSource(Source):
             params["loc"] = zip_code
             params["radius"] = str(radius_miles)
 
+        await throttle("offerup")
         try:
             resp = await self._client.get(_SEARCH_URL, params=params)
             resp.raise_for_status()
