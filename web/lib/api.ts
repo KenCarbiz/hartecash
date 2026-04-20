@@ -129,6 +129,90 @@ export function formatMileage(value: number | null): string {
   return `${new Intl.NumberFormat("en-US").format(value)} mi`;
 }
 
+// ---------- source health ----------
+
+export interface SourceHealth {
+  source: string;
+  total_listings: number;
+  listings_last_24h: number;
+  listings_last_7d: number;
+  last_scrape_at: string | null;
+  last_scrape_error: string | null;
+  recent_inserted: number;
+  recent_updated: number;
+}
+
+export interface ScrapeRunRow {
+  id: number;
+  source: string;
+  params: Record<string, unknown>;
+  started_at: string;
+  finished_at: string | null;
+  fetched_count: number;
+  inserted_count: number;
+  updated_count: number;
+  error: string | null;
+}
+
+export async function getSourceHealth(): Promise<SourceHealth[]> {
+  const res = await fetch(buildUrl("/sources/health"), { cache: "no-store" });
+  if (!res.ok) return [];
+  return (await res.json()) as SourceHealth[];
+}
+
+export async function getScrapeRuns(source?: string): Promise<ScrapeRunRow[]> {
+  const res = await fetch(
+    buildUrl("/sources/runs", source ? { source, limit: 50 } : { limit: 50 }),
+    { cache: "no-store" },
+  );
+  if (!res.ok) return [];
+  return (await res.json()) as ScrapeRunRow[];
+}
+
+// ---------- API keys ----------
+
+export interface ApiKeyRow {
+  id: number;
+  dealer_id: string;
+  name: string;
+  token_prefix: string;
+  created_at: string;
+  last_used_at: string | null;
+  revoked_at: string | null;
+}
+
+export interface ApiKeyCreated extends ApiKeyRow {
+  token: string;
+}
+
+export async function listApiKeys(): Promise<ApiKeyRow[]> {
+  const res = await fetch(buildUrl("/api-keys"), {
+    headers: crmHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new FsboApiError(`FSBO API ${res.status}`, res.status, await res.text());
+  return (await res.json()) as ApiKeyRow[];
+}
+
+export async function createApiKey(name: string): Promise<ApiKeyCreated> {
+  const res = await fetch(buildUrl("/api-keys"), {
+    method: "POST",
+    headers: crmHeaders(),
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) throw new FsboApiError(`FSBO API ${res.status}`, res.status, await res.text());
+  return (await res.json()) as ApiKeyCreated;
+}
+
+export async function revokeApiKey(id: number): Promise<ApiKeyRow> {
+  const res = await fetch(buildUrl(`/api-keys/${id}/revoke`), {
+    method: "POST",
+    headers: crmHeaders(),
+  });
+  if (!res.ok) throw new FsboApiError(`FSBO API ${res.status}`, res.status, await res.text());
+  return (await res.json()) as ApiKeyRow;
+}
+
 // ---------- CRM ----------
 
 export type LeadStatus =
