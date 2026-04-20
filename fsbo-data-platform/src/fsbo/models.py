@@ -187,6 +187,53 @@ class Interaction(Base):
     )
 
 
+class MessageTemplate(Base):
+    """Reusable outreach message, scoped to a dealer. Supports {{placeholders}}
+    that get filled from the listing context when rendered.
+
+    Known placeholders:
+      {{year}} {{make}} {{model}} {{trim}} {{price}} {{mileage}}
+      {{city}} {{state}} {{vin}}
+    """
+
+    __tablename__ = "message_templates"
+    __table_args__ = (
+        UniqueConstraint("dealer_id", "name", name="uq_template_dealer_name"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    dealer_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    category: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="outreach"
+    )  # outreach | vin_request | offer | follow_up | custom
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    is_default: Mapped[bool] = mapped_column(default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class DailyActivity(Base):
+    """Daily per-user activity totals for the battle tracker."""
+
+    __tablename__ = "daily_activity"
+    __table_args__ = (
+        UniqueConstraint("dealer_id", "user_id", "date", name="uq_activity_user_date"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    dealer_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    date: Mapped[str] = mapped_column(String(10), nullable=False)  # YYYY-MM-DD
+    messages_sent: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    calls_made: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    offers_made: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    appointments: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    purchases: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    goal_messages: Mapped[int] = mapped_column(Integer, default=60, nullable=False)
+
+
 class WebhookDelivery(Base):
     __tablename__ = "webhook_deliveries"
     __table_args__ = (Index("ix_webhook_deliveries_status", "status", "next_attempt_at"),)

@@ -8,26 +8,33 @@ export function FilterBar({ current }: FilterBarProps) {
   return (
     <form
       method="GET"
-      className="rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 grid grid-cols-2 md:grid-cols-6 gap-3"
+      className="panel p-4 grid grid-cols-2 md:grid-cols-6 gap-3"
     >
+      <TextInput
+        name="q"
+        label="Search"
+        defaultValue={current.q}
+        placeholder="2018 f-150, diesel, low miles…"
+        span={2}
+      />
       <TextInput name="make" label="Make" defaultValue={current.make} placeholder="Ford" />
       <TextInput name="model" label="Model" defaultValue={current.model} placeholder="F-150" />
       <TextInput
         name="year_min"
-        label="Year min"
+        label="Year ≥"
         type="number"
         defaultValue={current.year_min?.toString()}
       />
       <TextInput
         name="price_max"
-        label="Price max"
+        label="Price ≤"
         type="number"
         defaultValue={current.price_max?.toString()}
       />
       <TextInput name="zip" label="ZIP" defaultValue={current.zip} placeholder="33607" />
       <Select
         name="classification"
-        label="Classification"
+        label="Class"
         defaultValue={current.classification ?? "private_seller"}
         options={[
           { value: "private_seller", label: "Private sellers" },
@@ -37,11 +44,17 @@ export function FilterBar({ current }: FilterBarProps) {
           { value: "uncertain", label: "Uncertain" },
         ]}
       />
-      <div className="col-span-2 md:col-span-6 flex justify-end">
-        <button
-          type="submit"
-          className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
-        >
+      <TextInput
+        name="mileage_max"
+        label="Mileage ≤"
+        type="number"
+        defaultValue={current.mileage_max?.toString()}
+      />
+      <div className="col-span-2 md:col-span-6 flex items-center justify-between border-t border-ink-200 pt-3">
+        <p className="text-xs text-ink-500">
+          Filters apply server-side. Use search for full-text across title + description.
+        </p>
+        <button type="submit" className="btn-primary">
           Apply filters
         </button>
       </div>
@@ -55,22 +68,24 @@ function TextInput({
   defaultValue,
   placeholder,
   type = "text",
+  span = 1,
 }: {
   name: string;
   label: string;
   defaultValue?: string;
   placeholder?: string;
   type?: string;
+  span?: 1 | 2;
 }) {
   return (
-    <label className="flex flex-col gap-1 text-xs text-slate-500">
-      {label}
+    <label className={`flex flex-col gap-1 ${span === 2 ? "col-span-2" : ""}`}>
+      <span className="label">{label}</span>
       <input
         name={name}
         type={type}
         defaultValue={defaultValue ?? ""}
         placeholder={placeholder}
-        className="rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-2 py-1.5 text-sm text-slate-900 dark:text-slate-100"
+        className="input"
       />
     </label>
   );
@@ -88,13 +103,9 @@ function Select({
   options: { value: string; label: string }[];
 }) {
   return (
-    <label className="flex flex-col gap-1 text-xs text-slate-500">
-      {label}
-      <select
-        name={name}
-        defaultValue={defaultValue}
-        className="rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-2 py-1.5 text-sm text-slate-900 dark:text-slate-100"
-      >
+    <label className="flex flex-col gap-1">
+      <span className="label">{label}</span>
+      <select name={name} defaultValue={defaultValue} className="input">
         {options.map((o) => (
           <option key={o.value} value={o.value}>
             {o.label}

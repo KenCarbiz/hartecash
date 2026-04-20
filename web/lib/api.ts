@@ -52,6 +52,7 @@ export interface ListingsQuery {
   price_max?: number;
   mileage_max?: number;
   zip?: string;
+  q?: string;
   classification?: Classification | "";
   limit?: number;
   offset?: number;
@@ -148,6 +149,17 @@ export interface Lead {
   notes: string | null;
   created_at: string;
   updated_at: string;
+  // Present on inbox list endpoint (LeadWithListing); absent on single-lead lookup.
+  listing_title?: string | null;
+  listing_year?: number | null;
+  listing_make?: string | null;
+  listing_model?: string | null;
+  listing_price?: number | null;
+  listing_mileage?: number | null;
+  listing_city?: string | null;
+  listing_state?: string | null;
+  listing_zip?: string | null;
+  listing_source?: string;
 }
 
 export interface Interaction {
@@ -168,6 +180,20 @@ const DEMO_DEALER_ID = process.env.DEMO_DEALER_ID ?? "demo-dealer";
 
 function crmHeaders(dealerId: string = DEMO_DEALER_ID): HeadersInit {
   return { "X-Dealer-Id": dealerId, "Content-Type": "application/json" };
+}
+
+export async function listLeads(params: {
+  status?: LeadStatus;
+  assigned_to?: string;
+  limit?: number;
+  offset?: number;
+} = {}): Promise<Lead[]> {
+  const res = await fetch(buildUrl("/leads", params as Record<string, unknown>), {
+    headers: crmHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new FsboApiError(`FSBO API ${res.status}`, res.status, await res.text());
+  return (await res.json()) as Lead[];
 }
 
 export async function getLeadForListing(listingId: number): Promise<Lead | null> {
@@ -211,6 +237,103 @@ export async function listInteractions(leadId: number): Promise<Interaction[]> {
   });
   if (!res.ok) throw new FsboApiError(`FSBO API ${res.status}`, res.status, await res.text());
   return (await res.json()) as Interaction[];
+}
+
+// ---------- templates ----------
+
+export interface MessageTemplate {
+  id: number;
+  dealer_id: string;
+  name: string;
+  category: string;
+  body: string;
+  is_default: boolean;
+  created_at: string;
+}
+
+export async function listTemplates(category?: string): Promise<MessageTemplate[]> {
+  const res = await fetch(
+    buildUrl("/templates", category ? { category } : undefined),
+    { headers: crmHeaders(), cache: "no-store" },
+  );
+  if (!res.ok) throw new FsboApiError(`FSBO API ${res.status}`, res.status, await res.text());
+  return (await res.json()) as MessageTemplate[];
+}
+
+export async function renderTemplate(
+  templateId: number,
+  listingId: number,
+): Promise<{ template_id: number; rendered: string }> {
+  const res = await fetch(buildUrl(`/templates/${templateId}/render/${listingId}`), {
+    headers: crmHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new FsboApiError(`FSBO API ${res.status}`, res.status, await res.text());
+  return await res.json();
+}
+
+// ---------- AI ----------
+
+export async function aiOpener(
+  listingId: number,
+  tone: "direct" | "friendly" | "cash-buyer" = "direct",
+): Promise<{ message: string; tone: string; listing_id: number }> {
+  const res = await fetch(buildUrl("/ai/opener"), {
+    method: "POST",
+    headers: crmHeaders(),
+    body: JSON.stringify({ listing_id: listingId, tone }),
+  });
+  if (!res.ok) throw new FsboApiError(`FSBO API ${res.status}`, res.status, await res.text());
+  return await res.json();
+}
+
+// ---------- activity / battle tracker ----------
+
+export interface BattleSummary {
+  today: {
+    dealer_id: string;
+    user_id: string;
+    date: string;
+    messages_sent: number;
+    calls_made: number;
+    offers_made: number;
+    appointments: number;
+    purchases: number;
+    goal_messages: number;
+  };
+  goal_pct: number;
+  streak_days: number;
+  week_totals: {
+    messages_sent: number;
+    calls_made: number;
+    offers_made: number;
+    appointments: number;
+    purchases: number;
+  };
+}
+
+export async function getBattleSummary(userId = "me"): Promise<BattleSummary> {
+  const res = await fetch(buildUrl("/activity/summary", { user_id: userId }), {
+    headers: crmHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new FsboApiError(`FSBO API ${res.status}`, res.status, await res.text());
+  return await res.json();
+}
+
+export async function bumpActivity(body: {
+  user_id?: string;
+  messages_sent?: number;
+  calls_made?: number;
+  offers_made?: number;
+  appointments?: number;
+  purchases?: number;
+}): Promise<void> {
+  await fetch(buildUrl("/activity/bump"), {
+    method: "POST",
+    headers: crmHeaders(),
+    body: JSON.stringify(body),
+  });
 }
 
 export async function addInteraction(

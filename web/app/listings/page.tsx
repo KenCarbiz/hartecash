@@ -1,20 +1,30 @@
 import Link from "next/link";
+import { PageHeader } from "@/components/AppShell";
 import { FilterBar } from "@/components/FilterBar";
-import { ListingCard } from "@/components/ListingCard";
 import {
   type Classification,
   type ListingsQuery,
   FsboApiError,
+  formatMileage,
+  formatPrice,
+  formatRelativeDate,
   listListings,
 } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
+const CLASS_BADGE: Record<string, string> = {
+  private_seller: "bg-emerald-100 text-emerald-800",
+  dealer: "bg-amber-100 text-amber-800",
+  scam: "bg-rose-100 text-rose-800",
+  uncertain: "bg-ink-100 text-ink-700",
+  unclassified: "bg-ink-100 text-ink-600",
+};
+
 function parseQuery(searchParams: Record<string, string | string[] | undefined>): ListingsQuery {
   const s = (k: string) => {
     const v = searchParams[k];
-    if (Array.isArray(v)) return v[0];
-    return v;
+    return Array.isArray(v) ? v[0] : v;
   };
   const n = (k: string) => {
     const v = s(k);
@@ -24,6 +34,7 @@ function parseQuery(searchParams: Record<string, string | string[] | undefined>)
   };
   const cls = s("classification");
   return {
+    q: s("q") || undefined,
     make: s("make") || undefined,
     model: s("model") || undefined,
     year_min: n("year_min"),
@@ -32,8 +43,7 @@ function parseQuery(searchParams: Record<string, string | string[] | undefined>)
     price_max: n("price_max"),
     mileage_max: n("mileage_max"),
     zip: s("zip") || undefined,
-    classification:
-      cls === undefined ? "private_seller" : (cls as Classification | ""),
+    classification: cls === undefined ? "private_seller" : (cls as Classification | ""),
     limit: n("limit") ?? 50,
     offset: n("offset") ?? 0,
   };
@@ -56,74 +66,130 @@ export default async function ListingsPage({
     page = { items: [], total: 0, limit: query.limit ?? 50, offset: query.offset ?? 0 };
   }
 
-  const nextOffset = (query.offset ?? 0) + (query.limit ?? 50);
-  const prevOffset = Math.max(0, (query.offset ?? 0) - (query.limit ?? 50));
-  const qs = (offset: number) => {
+  const limit = query.limit ?? 50;
+  const offset = query.offset ?? 0;
+  const nextOffset = offset + limit;
+  const prevOffset = Math.max(0, offset - limit);
+  const qs = (newOffset: number) => {
     const params = new URLSearchParams();
-    for (const [key, value] of Object.entries(query)) {
-      if (value === undefined || value === null || value === "") continue;
-      params.set(key, String(value));
+    for (const [k, v] of Object.entries(query)) {
+      if (v === undefined || v === null || v === "") continue;
+      params.set(k, String(v));
     }
-    params.set("offset", String(offset));
+    params.set("offset", String(newOffset));
     return `?${params.toString()}`;
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-end justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Listings</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            {page.total.toLocaleString()} results · showing {page.offset + 1}–
-            {Math.min(page.offset + page.items.length, page.total)}
-          </p>
-        </div>
-      </div>
+    <>
+      <PageHeader
+        title="Listings"
+        subtitle={`${page.total.toLocaleString()} results · showing ${
+          page.items.length === 0 ? 0 : offset + 1
+        }–${Math.min(offset + page.items.length, page.total)}`}
+      />
 
       <FilterBar current={query} />
 
       {error && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-900/20 p-4 text-sm">
+        <div className="panel mt-4 border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
           Can&apos;t reach the FSBO API. ({error})
         </div>
       )}
 
-      {!error && page.items.length === 0 && (
-        <div className="rounded-lg border border-dashed border-slate-300 dark:border-slate-700 p-12 text-center text-sm text-slate-500">
+      {!error && page.items.length === 0 ? (
+        <div className="panel mt-4 p-12 text-center text-sm text-ink-500">
           No listings match your filters. Try widening the criteria.
+        </div>
+      ) : (
+        <div className="panel mt-4 overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-ink-50 text-xs uppercase tracking-wide text-ink-500">
+              <tr>
+                <th className="text-left font-medium px-4 py-2.5">Vehicle</th>
+                <th className="text-left font-medium px-4 py-2.5">Location</th>
+                <th className="text-right font-medium px-4 py-2.5">Mileage</th>
+                <th className="text-right font-medium px-4 py-2.5">Price</th>
+                <th className="text-left font-medium px-4 py-2.5">Source</th>
+                <th className="text-left font-medium px-4 py-2.5">Class</th>
+                <th className="text-right font-medium px-4 py-2.5">Posted</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-ink-200">
+              {page.items.map((l) => {
+                const vehicle =
+                  [l.year, l.make, l.model].filter(Boolean).join(" ") || l.title || "—";
+                const loc =
+                  [l.city, l.state].filter(Boolean).join(", ") || l.zip_code || "—";
+                return (
+                  <tr key={l.id} className="hover:bg-ink-50">
+                    <td className="px-4 py-3">
+                      <Link
+                        href={`/listings/${l.id}`}
+                        className="block font-medium text-ink-900 hover:text-brand-600"
+                      >
+                        {vehicle}
+                      </Link>
+                      {l.title && l.title !== vehicle && (
+                        <p className="mt-0.5 truncate text-xs text-ink-500 max-w-md">
+                          {l.title}
+                        </p>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-ink-700">{loc}</td>
+                    <td className="px-4 py-3 text-right tabular text-ink-700">
+                      {formatMileage(l.mileage)}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular font-semibold">
+                      {formatPrice(l.price)}
+                    </td>
+                    <td className="px-4 py-3 text-ink-600">{l.source}</td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`badge ${
+                          CLASS_BADGE[l.classification] ?? CLASS_BADGE.unclassified
+                        }`}
+                      >
+                        {l.classification.replace("_", " ")}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right text-xs text-ink-500 tabular">
+                      {formatRelativeDate(l.posted_at ?? l.first_seen_at)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
 
-      <div className="space-y-3">
-        {page.items.map((listing) => (
-          <ListingCard key={listing.id} listing={listing} />
-        ))}
-      </div>
-
       {page.items.length > 0 && (
-        <div className="flex items-center justify-between">
+        <div className="mt-4 flex items-center justify-between">
           <Link
             href={qs(prevOffset)}
-            aria-disabled={page.offset === 0}
-            className={`rounded-md border border-slate-300 dark:border-slate-700 px-3 py-1.5 text-sm ${
-              page.offset === 0 ? "pointer-events-none opacity-40" : "hover:bg-slate-100 dark:hover:bg-slate-800"
+            aria-disabled={offset === 0}
+            className={`btn-secondary ${
+              offset === 0 ? "pointer-events-none opacity-40" : ""
             }`}
           >
             ← Previous
           </Link>
+          <span className="text-xs text-ink-500 tabular">
+            Page {Math.floor(offset / limit) + 1} of{" "}
+            {Math.max(1, Math.ceil(page.total / limit))}
+          </span>
           <Link
             href={qs(nextOffset)}
             aria-disabled={nextOffset >= page.total}
-            className={`rounded-md border border-slate-300 dark:border-slate-700 px-3 py-1.5 text-sm ${
-              nextOffset >= page.total
-                ? "pointer-events-none opacity-40"
-                : "hover:bg-slate-100 dark:hover:bg-slate-800"
+            className={`btn-secondary ${
+              nextOffset >= page.total ? "pointer-events-none opacity-40" : ""
             }`}
           >
             Next →
           </Link>
         </div>
       )}
-    </div>
+    </>
   );
 }

@@ -54,6 +54,19 @@ class LeadOut(BaseModel):
     updated_at: datetime
 
 
+class LeadWithListing(LeadOut):
+    listing_title: str | None
+    listing_year: int | None
+    listing_make: str | None
+    listing_model: str | None
+    listing_price: float | None
+    listing_mileage: int | None
+    listing_city: str | None
+    listing_state: str | None
+    listing_zip: str | None
+    listing_source: str
+
+
 class InteractionIn(BaseModel):
     kind: InteractionKind
     body: str | None = None
@@ -108,7 +121,7 @@ def create_lead(
     return LeadOut.model_validate(lead)
 
 
-@router.get("/leads", response_model=list[LeadOut])
+@router.get("/leads", response_model=list[LeadWithListing])
 def list_leads(
     dealer_id: DealerIdHeader,
     db: Annotated[Session, Depends(get_session)],
@@ -116,16 +129,44 @@ def list_leads(
     assigned_to: str | None = None,
     limit: int = 100,
     offset: int = 0,
-) -> list[LeadOut]:
-    stmt = select(Lead).where(Lead.dealer_id == dealer_id)
+) -> list[LeadWithListing]:
+    stmt = (
+        select(Lead, Listing)
+        .join(Listing, Lead.listing_id == Listing.id)
+        .where(Lead.dealer_id == dealer_id)
+    )
     if status:
         stmt = stmt.where(Lead.status == status.value)
     if assigned_to:
         stmt = stmt.where(Lead.assigned_to == assigned_to)
-    rows = db.scalars(
+    rows = db.execute(
         stmt.order_by(Lead.updated_at.desc()).limit(limit).offset(offset)
     ).all()
-    return [LeadOut.model_validate(r) for r in rows]
+
+    return [
+        LeadWithListing(
+            id=lead.id,
+            dealer_id=lead.dealer_id,
+            listing_id=lead.listing_id,
+            assigned_to=lead.assigned_to,
+            status=lead.status,
+            offered_price=lead.offered_price,
+            notes=lead.notes,
+            created_at=lead.created_at,
+            updated_at=lead.updated_at,
+            listing_title=listing.title,
+            listing_year=listing.year,
+            listing_make=listing.make,
+            listing_model=listing.model,
+            listing_price=listing.price,
+            listing_mileage=listing.mileage,
+            listing_city=listing.city,
+            listing_state=listing.state,
+            listing_zip=listing.zip_code,
+            listing_source=listing.source,
+        )
+        for lead, listing in rows
+    ]
 
 
 @router.get("/leads/by-listing/{listing_id}", response_model=LeadOut | None)

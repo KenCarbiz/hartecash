@@ -1,7 +1,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from fsbo.api.schemas import ListingOut, ListingsPage
@@ -23,6 +23,7 @@ def list_listings(
     price_max: float | None = None,
     mileage_max: int | None = None,
     zip_code: str | None = Query(None, alias="zip"),
+    q: str | None = Query(None, description="Case-insensitive text search over title/description"),
     classification: str | None = Query(
         Classification.PRIVATE_SELLER.value,
         description="Filter by classification. Pass empty string to disable.",
@@ -40,6 +41,11 @@ def list_listings(
         filters.append(func.lower(Listing.make) == make.lower())
     if model:
         filters.append(func.lower(Listing.model) == model.lower())
+    if q:
+        pattern = f"%{q.strip()}%"
+        filters.append(
+            or_(Listing.title.ilike(pattern), Listing.description.ilike(pattern))
+        )
     if year_min is not None:
         filters.append(Listing.year >= year_min)
     if year_max is not None:
