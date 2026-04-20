@@ -106,3 +106,38 @@ class ScrapeRun(Base):
     inserted_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     updated_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     error: Mapped[str | None] = mapped_column(Text)
+
+
+class WebhookSubscription(Base):
+    __tablename__ = "webhook_subscriptions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    url: Mapped[str] = mapped_column(Text, nullable=False)
+    secret: Mapped[str] = mapped_column(String(128), nullable=False)
+    event: Mapped[str] = mapped_column(String(64), nullable=False, default="listing.created")
+    filters: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    active: Mapped[bool] = mapped_column(default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class WebhookDelivery(Base):
+    __tablename__ = "webhook_deliveries"
+    __table_args__ = (Index("ix_webhook_deliveries_status", "status", "next_attempt_at"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    subscription_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    listing_id: Mapped[int | None] = mapped_column(Integer)
+    event: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), default="pending", nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_status_code: Mapped[int | None] = mapped_column(Integer)
+    last_error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

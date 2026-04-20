@@ -18,6 +18,7 @@ dependencies = [
     "anthropic>=0.39",
     "python-dateutil>=2.9",
     "structlog>=24.4",
+    "apscheduler>=3.10",
 ]
 
 [project.optional-dependencies]

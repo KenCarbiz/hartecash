@@ -14,10 +14,12 @@ from sqlalchemy import select
 from fsbo.db import session_scope
 from fsbo.enrichment.classifier import classify
 from fsbo.enrichment.dedup import compute_dedup_key
+from fsbo.enrichment.vin import decode_vin
 from fsbo.logging import configure, get_logger
 from fsbo.models import Classification, Listing, ScrapeRun
 from fsbo.sources import REGISTRY
 from fsbo.sources.base import NormalizedListing
+from fsbo.webhooks.delivery import enqueue_for_listing
 
 log = get_logger(__name__)
 
@@ -40,7 +42,7 @@ async def run(source_name: str, **params: object) -> None:
     try:
         async for norm in source.fetch(**params):
             fetched += 1
-            did_insert = upsert(norm)
+            did_insert = await upsert(norm)
             if did_insert:
                 inserted += 1
             else:
@@ -75,8 +77,18 @@ async def run(source_name: str, **params: object) -> None:
     )
 
 
-def upsert(norm: NormalizedListing) -> bool:
+async def upsert(norm: NormalizedListing) -> bool:
     """Returns True if the listing was newly inserted."""
+    # VIN decode happens outside the DB session so we don't hold the connection
+    # over a network call.
+    if norm.vin and not (norm.year and norm.make and norm.model):
+        decoded = await decode_vin(norm.vin)
+        if decoded and not decoded.error_code:
+            norm.year = norm.year or decoded.year
+            norm.make = norm.make or decoded.make
+            norm.model = norm.model or decoded.model
+            norm.trim = norm.trim or decoded.trim
+
     with session_scope() as db:
         existing = db.scalar(
             select(Listing).where(
@@ -124,6 +136,9 @@ def upsert(norm: NormalizedListing) -> bool:
         row.classification = result.label
         row.classification_confidence = result.confidence
         row.classification_reason = result.reason
+
+        if result.label == Classification.PRIVATE_SELLER.value:
+            enqueue_for_listing(db, row)
         return True
 
 

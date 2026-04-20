@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 
-from fsbo.api.routes import listings
+from fsbo.api.routes import listings, webhooks
 from fsbo.logging import configure
 
 configure()
@@ -11,6 +11,7 @@ app = FastAPI(
     description="FSBO vehicle listing aggregation API",
 )
 app.include_router(listings.router)
+app.include_router(webhooks.router)
 
 
 @app.get("/health")
