@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { BulkClaimBar } from "@/components/BulkClaimBar";
+import { ScoreBadge } from "@/components/ScoreBadge";
 import {
   type Listing,
   formatMileage,
@@ -49,6 +50,7 @@ export function ListingsTable({ listings }: { listings: Listing[] }) {
                   className="accent-brand-600"
                 />
               </th>
+              <th className="text-center font-medium px-2 py-2.5">Score</th>
               <th className="text-left font-medium px-4 py-2.5">Vehicle</th>
               <th className="text-left font-medium px-4 py-2.5">Location</th>
               <th className="text-right font-medium px-4 py-2.5">Mileage</th>
@@ -78,6 +80,9 @@ export function ListingsTable({ listings }: { listings: Listing[] }) {
                       aria-label={`Select ${vehicle}`}
                       className="accent-brand-600"
                     />
+                  </td>
+                  <td className="px-2 py-3 text-center">
+                    <ScoreBadge score={l.lead_quality_score} size="sm" />
                   </td>
                   <td className="px-4 py-3">
                     <Link

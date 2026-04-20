@@ -29,6 +29,10 @@ export interface Listing {
   classification: Classification;
   classification_confidence: number | null;
   classification_reason: string | null;
+  dealer_likelihood?: number | null;
+  scam_score?: number | null;
+  lead_quality_score?: number | null;
+  quality_breakdown?: Record<string, number>;
   images: string[];
   posted_at: string | null;
   first_seen_at: string;
@@ -54,6 +58,8 @@ export interface ListingsQuery {
   zip?: string;
   q?: string;
   classification?: Classification | "";
+  min_score?: number;
+  sort?: "posted_at" | "score" | "price";
   limit?: number;
   offset?: number;
 }
@@ -270,6 +276,31 @@ export async function bulkClaim(
   });
   if (!res.ok) throw new FsboApiError(`FSBO API ${res.status}`, res.status, await res.text());
   return await res.json();
+}
+
+// ---------- listing stats (days on market, price history) ----------
+
+export interface PriceHistoryPoint {
+  price: number;
+  delta: number | null;
+  observed_at: string;
+}
+
+export interface ListingStats {
+  listing_id: number;
+  days_on_market: number | null;
+  price_drops: number;
+  total_drop_amount: number | null;
+  last_price_change_at: string | null;
+  price_history: PriceHistoryPoint[];
+}
+
+export async function getListingStats(listingId: number): Promise<ListingStats | null> {
+  const res = await fetch(buildUrl(`/listings/${listingId}/stats`), {
+    cache: "no-store",
+  });
+  if (!res.ok) return null;
+  return (await res.json()) as ListingStats;
 }
 
 // ---------- duplicates ----------

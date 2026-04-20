@@ -50,6 +50,23 @@ export function FilterBar({ current }: FilterBarProps) {
         type="number"
         defaultValue={current.mileage_max?.toString()}
       />
+      <TextInput
+        name="min_score"
+        label="Score ≥"
+        type="number"
+        defaultValue={current.min_score?.toString()}
+        placeholder="60"
+      />
+      <Select
+        name="sort"
+        label="Sort"
+        defaultValue={current.sort ?? "posted_at"}
+        options={[
+          { value: "posted_at", label: "Newest first" },
+          { value: "score", label: "Highest score" },
+          { value: "price", label: "Lowest price" },
+        ]}
+      />
       <div className="col-span-2 md:col-span-6 flex items-center justify-between border-t border-ink-200 pt-3">
         <p className="text-xs text-ink-500">
           Filters apply server-side. Use search for full-text across title + description.

@@ -28,6 +28,8 @@ def list_listings(
         Classification.PRIVATE_SELLER.value,
         description="Filter by classification. Pass empty string to disable.",
     ),
+    min_score: int | None = Query(None, ge=0, le=100),
+    sort: str = Query("posted_at", pattern="^(posted_at|score|price)$"),
     limit: int = Query(50, le=500),
     offset: int = 0,
 ) -> ListingsPage:
@@ -60,17 +62,25 @@ def list_listings(
         filters.append(Listing.zip_code == zip_code)
     if classification:
         filters.append(Listing.classification == classification)
+    if min_score is not None:
+        filters.append(Listing.lead_quality_score >= min_score)
 
     for f in filters:
         stmt = stmt.where(f)
         count_stmt = count_stmt.where(f)
 
+    if sort == "score":
+        order_by = [
+            Listing.lead_quality_score.desc().nulls_last(),
+            Listing.posted_at.desc().nulls_last(),
+        ]
+    elif sort == "price":
+        order_by = [Listing.price.asc().nulls_last(), Listing.id.desc()]
+    else:
+        order_by = [Listing.posted_at.desc().nulls_last(), Listing.id.desc()]
+
     total = db.scalar(count_stmt) or 0
-    rows = db.scalars(
-        stmt.order_by(Listing.posted_at.desc().nulls_last(), Listing.id.desc())
-        .limit(limit)
-        .offset(offset)
-    ).all()
+    rows = db.scalars(stmt.order_by(*order_by).limit(limit).offset(offset)).all()
 
     return ListingsPage(
         items=[ListingOut.model_validate(r) for r in rows],

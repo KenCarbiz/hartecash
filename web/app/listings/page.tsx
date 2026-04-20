@@ -25,6 +25,9 @@ function parseQuery(searchParams: Record<string, string | string[] | undefined>)
     return Number.isFinite(parsed) ? parsed : undefined;
   };
   const cls = s("classification");
+  const sortRaw = s("sort");
+  const sort: "posted_at" | "score" | "price" =
+    sortRaw === "score" || sortRaw === "price" ? sortRaw : "posted_at";
   return {
     q: s("q") || undefined,
     make: s("make") || undefined,
@@ -36,6 +39,8 @@ function parseQuery(searchParams: Record<string, string | string[] | undefined>)
     mileage_max: n("mileage_max"),
     zip: s("zip") || undefined,
     classification: cls === undefined ? "private_seller" : (cls as Classification | ""),
+    min_score: n("min_score"),
+    sort,
     limit: n("limit") ?? 50,
     offset: n("offset") ?? 0,
   };

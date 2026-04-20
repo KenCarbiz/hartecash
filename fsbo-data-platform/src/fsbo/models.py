@@ -109,6 +109,15 @@ class Listing(Base):
 
     dedup_key: Mapped[str | None] = mapped_column(String(128), index=True)
 
+    # Research-informed scoring fields.
+    # Raw likelihood output from the dealer classifier (0..1). Separate from
+    # `classification` because the label can be overridden but the score is
+    # always the raw signal aggregate.
+    dealer_likelihood: Mapped[float | None] = mapped_column(Float)
+    scam_score: Mapped[float | None] = mapped_column(Float)
+    lead_quality_score: Mapped[int | None] = mapped_column(Integer, index=True)
+    quality_breakdown: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+
 
 class ScrapeRun(Base):
     __tablename__ = "scrape_runs"
@@ -137,6 +146,22 @@ class WebhookSubscription(Base):
     filters: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     active: Mapped[bool] = mapped_column(default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class PriceHistory(Base):
+    """Log every price change we observe on a listing. Drops = motivation signal;
+    increases = owner correcting a mistake."""
+
+    __tablename__ = "price_history"
+    __table_args__ = (Index("ix_price_history_listing_time", "listing_id", "observed_at"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    listing_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    price: Mapped[float] = mapped_column(Float, nullable=False)
+    delta: Mapped[float | None] = mapped_column(Float)
+    observed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 

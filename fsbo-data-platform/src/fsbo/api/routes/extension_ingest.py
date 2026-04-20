@@ -19,10 +19,15 @@ from sqlalchemy.orm import Session
 
 from fsbo.db import get_session
 from fsbo.enrichment.classifier import classify
+from fsbo.enrichment.dealer_signals import assess as assess_dealer
 from fsbo.enrichment.dedup import compute_dedup_key
+from fsbo.enrichment.phone_graph import count_other_listings
+from fsbo.enrichment.price_tracking import record_price
+from fsbo.enrichment.quality import score_listing
 from fsbo.enrichment.vin import decode_vin
-from fsbo.models import Classification, Listing
+from fsbo.models import Classification, Listing, PriceHistory
 from fsbo.sources.base import NormalizedListing
+from fsbo.valuation.market import estimate as estimate_market
 
 router = APIRouter(tags=["extension"])
 
@@ -70,6 +75,21 @@ class DuplicateRow(BaseModel):
     dedup_key: str | None
 
 
+class PriceHistoryRow(BaseModel):
+    price: float
+    delta: float | None
+    observed_at: datetime
+
+
+class ListingStats(BaseModel):
+    listing_id: int
+    days_on_market: int | None
+    price_drops: int
+    total_drop_amount: float | None
+    last_price_change_at: datetime | None
+    price_history: list[PriceHistoryRow]
+
+
 @router.post("/sources/extension/ingest", response_model=IngestOut)
 async def ingest(
     payload: IngestIn, db: Annotated[Session, Depends(get_session)]
@@ -92,6 +112,10 @@ async def ingest(
     )
     if existing:
         existing.last_seen_at = datetime.now(timezone.utc)
+        # Log a price history entry if this visit observes a different price.
+        if norm.price is not None and norm.price > 0 and existing.price != norm.price:
+            if record_price(db, existing, norm.price):
+                existing.price = norm.price
         # Fill in fields the extension found that weren't set before.
         for attr in (
             "title",
@@ -100,7 +124,6 @@ async def ingest(
             "make",
             "model",
             "mileage",
-            "price",
             "vin",
             "city",
             "state",
@@ -140,10 +163,50 @@ async def ingest(
     db.add(row)
     db.flush()
 
-    result = classify(norm)
-    row.classification = result.label
-    row.classification_confidence = result.confidence
-    row.classification_reason = result.reason
+    phone_count = count_other_listings(
+        db, norm.seller_phone, exclude_id=row.id, within_days=30
+    )
+    extras: dict[str, bool] = {}
+    if phone_count >= 3:
+        extras["phone_on_3plus_listings_30d"] = True
+    if phone_count >= 5:
+        extras["phone_on_5plus_listings_90d"] = True
+    dealer = assess_dealer(norm, extras)
+    row.dealer_likelihood = dealer.likelihood
+    row.scam_score = dealer.scam_score
+
+    if dealer.scam_score >= 0.6:
+        row.classification = Classification.SCAM.value
+        row.classification_confidence = dealer.scam_score
+        row.classification_reason = "scam signals matched"
+    elif dealer.likelihood >= 0.7:
+        row.classification = Classification.DEALER.value
+        row.classification_confidence = dealer.likelihood
+        row.classification_reason = (
+            f"dealer likelihood {dealer.likelihood:.2f}"
+        )
+    else:
+        result = classify(norm)
+        row.classification = result.label
+        row.classification_confidence = result.confidence
+        row.classification_reason = result.reason
+
+    if norm.price is not None and norm.price > 0:
+        record_price(db, row, norm.price)
+
+    market = estimate_market(db, row)
+    market_ctx = {"median": market.median, "sample_size": market.sample_size}
+    q = score_listing(
+        row,
+        market=market_ctx,
+        phone_listing_count=phone_count,
+        dealer_likelihood=row.dealer_likelihood,
+        scam_score=row.scam_score,
+        price_drops=0,
+        days_on_market=0,
+    )
+    row.lead_quality_score = q.score
+    row.quality_breakdown = q.breakdown
 
     return IngestOut(listing_id=row.id, duplicate=False)
 
@@ -160,6 +223,43 @@ def lookup(
     if existing:
         return LookupOut(listing_id=existing.id, duplicate=True)
     return LookupOut(listing_id=None, duplicate=False)
+
+
+@router.get("/listings/{listing_id}/stats", response_model=ListingStats)
+def listing_stats(
+    listing_id: int, db: Annotated[Session, Depends(get_session)]
+) -> ListingStats:
+    listing = db.get(Listing, listing_id)
+    if not listing:
+        raise HTTPException(404, "listing not found")
+
+    history = db.scalars(
+        select(PriceHistory)
+        .where(PriceHistory.listing_id == listing_id)
+        .order_by(PriceHistory.observed_at.asc())
+    ).all()
+
+    drops = [float(h.delta) for h in history if h.delta is not None and h.delta < 0]
+    total_drop = sum(drops) if drops else None
+    last_change = history[-1].observed_at if history else None
+
+    posted = listing.posted_at or listing.first_seen_at
+    days_on_market: int | None = None
+    if posted:
+        posted_utc = posted if posted.tzinfo else posted.replace(tzinfo=timezone.utc)
+        days_on_market = max(0, int((datetime.now(timezone.utc) - posted_utc).total_seconds() / 86400))
+
+    return ListingStats(
+        listing_id=listing.id,
+        days_on_market=days_on_market,
+        price_drops=len(drops),
+        total_drop_amount=abs(total_drop) if total_drop is not None else None,
+        last_price_change_at=last_change,
+        price_history=[
+            PriceHistoryRow(price=h.price, delta=h.delta, observed_at=h.observed_at)
+            for h in history
+        ],
+    )
 
 
 @router.get("/listings/{listing_id}/duplicates", response_model=list[DuplicateRow])

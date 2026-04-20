@@ -32,6 +32,11 @@ class ListingOut(BaseModel):
     classification_confidence: float | None
     classification_reason: str | None
 
+    dealer_likelihood: float | None = None
+    scam_score: float | None = None
+    lead_quality_score: int | None = None
+    quality_breakdown: dict = {}
+
     images: list[str]
     posted_at: datetime | None
     first_seen_at: datetime

@@ -13,12 +13,17 @@ from sqlalchemy import select
 
 from fsbo.db import session_scope
 from fsbo.enrichment.classifier import classify
+from fsbo.enrichment.dealer_signals import assess as assess_dealer
 from fsbo.enrichment.dedup import compute_dedup_key
+from fsbo.enrichment.phone_graph import count_other_listings
+from fsbo.enrichment.price_tracking import count_drops, record_price
+from fsbo.enrichment.quality import score_listing
 from fsbo.enrichment.vin import decode_vin
 from fsbo.logging import configure, get_logger
 from fsbo.models import Classification, Listing, ScrapeRun
 from fsbo.sources import REGISTRY
 from fsbo.sources.base import NormalizedListing
+from fsbo.valuation.market import estimate as estimate_market
 from fsbo.webhooks.delivery import enqueue_for_listing
 
 log = get_logger(__name__)
@@ -99,8 +104,37 @@ async def upsert(norm: NormalizedListing) -> bool:
         now = datetime.now(timezone.utc)
         if existing:
             existing.last_seen_at = now
-            existing.price = norm.price or existing.price
             existing.mileage = norm.mileage or existing.mileage
+            if norm.price is not None and norm.price > 0:
+                # Log any price change before overwriting the current price.
+                if record_price(db, existing, norm.price):
+                    existing.price = norm.price
+                    drops = count_drops(db, existing.id)
+                    dom = int(
+                        (
+                            now
+                            - (existing.posted_at or existing.first_seen_at).replace(
+                                tzinfo=existing.posted_at.tzinfo
+                                if existing.posted_at and existing.posted_at.tzinfo
+                                else timezone.utc
+                            )
+                        ).total_seconds()
+                        / 86400
+                    )
+                    market = estimate_market(db, existing)
+                    q = score_listing(
+                        existing,
+                        market={"median": market.median, "sample_size": market.sample_size},
+                        phone_listing_count=count_other_listings(
+                            db, existing.seller_phone, exclude_id=existing.id
+                        ),
+                        dealer_likelihood=existing.dealer_likelihood,
+                        scam_score=existing.scam_score,
+                        price_drops=drops,
+                        days_on_market=dom,
+                    )
+                    existing.lead_quality_score = q.score
+                    existing.quality_breakdown = q.breakdown
             return False
 
         row = Listing(
@@ -132,12 +166,59 @@ async def upsert(norm: NormalizedListing) -> bool:
         db.add(row)
         db.flush()
 
-        result = classify(norm)
-        row.classification = result.label
-        row.classification_confidence = result.confidence
-        row.classification_reason = result.reason
+        # --- Phone cross-listing check ---
+        phone_count = count_other_listings(
+            db, norm.seller_phone, exclude_id=row.id, within_days=30
+        )
 
-        if result.label == Classification.PRIVATE_SELLER.value:
+        # --- Dealer signal aggregation (research-backed rulebook) ---
+        extras: dict[str, bool] = {}
+        if phone_count >= 3:
+            extras["phone_on_3plus_listings_30d"] = True
+        if phone_count >= 5:
+            extras["phone_on_5plus_listings_90d"] = True
+        dealer = assess_dealer(norm, extras)
+        row.dealer_likelihood = dealer.likelihood
+        row.scam_score = dealer.scam_score
+
+        # --- Classification: prefer signal-based when confident, else LLM ---
+        if dealer.scam_score >= 0.6:
+            row.classification = Classification.SCAM.value
+            row.classification_confidence = dealer.scam_score
+            row.classification_reason = "scam signals matched"
+        elif dealer.likelihood >= 0.7:
+            row.classification = Classification.DEALER.value
+            row.classification_confidence = dealer.likelihood
+            row.classification_reason = (
+                f"dealer likelihood {dealer.likelihood:.2f}; "
+                f"signals={[k for k,v in dealer.signals.items() if v][:5]}"
+            )
+        else:
+            result = classify(norm)
+            row.classification = result.label
+            row.classification_confidence = result.confidence
+            row.classification_reason = result.reason
+
+        # --- Initial price history entry (drop count will be 0) ---
+        if norm.price is not None and norm.price > 0:
+            record_price(db, row, norm.price)
+
+        # --- Lead quality score ---
+        market = estimate_market(db, row)
+        market_ctx = {"median": market.median, "sample_size": market.sample_size}
+        q = score_listing(
+            row,
+            market=market_ctx,
+            phone_listing_count=phone_count,
+            dealer_likelihood=row.dealer_likelihood,
+            scam_score=row.scam_score,
+            price_drops=0,
+            days_on_market=0,
+        )
+        row.lead_quality_score = q.score
+        row.quality_breakdown = q.breakdown
+
+        if row.classification == Classification.PRIVATE_SELLER.value:
             enqueue_for_listing(db, row)
         return True
 
