@@ -51,6 +51,7 @@ export async function saveSettings(update: Partial<Settings>): Promise<void> {
 // Message types routed through the service worker.
 export type WorkerMessage =
   | { kind: "ingest"; listing: IngestListing }
+  | { kind: "ingestBatch"; listings: IngestListing[] }
   | { kind: "lookupByUrl"; url: string }
   | { kind: "claimLead"; listingId: number };
 

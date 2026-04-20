@@ -39,6 +39,13 @@ async function handle(msg: WorkerMessage): Promise<WorkerResponse> {
         });
         return { ok: true, data };
       }
+      case "ingestBatch": {
+        const data = await apiFetch("/sources/extension/ingest/batch", {
+          method: "POST",
+          body: JSON.stringify({ listings: msg.listings }),
+        });
+        return { ok: true, data };
+      }
       case "lookupByUrl": {
         const data = await apiFetch(
           `/sources/extension/lookup?url=${encodeURIComponent(msg.url)}`,

@@ -64,6 +64,17 @@ class IngestOut(BaseModel):
     duplicate: bool
 
 
+class IngestBatchIn(BaseModel):
+    listings: list[ExtensionListing]
+
+
+class IngestBatchOut(BaseModel):
+    accepted: int
+    inserted: int
+    updated: int
+    rejected: int
+
+
 class LookupOut(BaseModel):
     listing_id: int | None
     duplicate: bool
@@ -216,6 +227,77 @@ async def ingest(
     row.auto_hide_reason = q.auto_hide_reason
 
     return IngestOut(listing_id=row.id, duplicate=False)
+
+
+@router.post("/sources/extension/ingest/batch", response_model=IngestBatchOut)
+def ingest_batch(
+    payload: IngestBatchIn, db: Annotated[Session, Depends(get_session)]
+) -> IngestBatchOut:
+    """Thin-tile batch ingest from the Facebook Marketplace feed harvester.
+
+    Fast path: no VIN decode, no market comps, no LLM. We insert a minimal
+    Listing row with title/price/city/images so it appears in the dealer's
+    feed immediately. Full enrichment runs when the dealer later opens the
+    detail page (single /ingest endpoint) or via the admin rescore job.
+    """
+    accepted = len(payload.listings)
+    inserted = 0
+    updated = 0
+    rejected = 0
+    now = datetime.now(timezone.utc)
+
+    for raw in payload.listings:
+        if not raw.external_id:
+            rejected += 1
+            continue
+        norm = _to_normalized(raw)
+        existing = db.scalar(
+            select(Listing).where(
+                Listing.source == norm.source,
+                Listing.external_id == norm.external_id,
+            )
+        )
+        if existing:
+            existing.last_seen_at = now
+            # Fill gaps only — never overwrite richer fields with thin-tile data.
+            for attr in ("title", "year", "price", "city", "state"):
+                if getattr(existing, attr, None) in (None, "") and getattr(norm, attr, None):
+                    setattr(existing, attr, getattr(norm, attr))
+            if not existing.images and norm.images:
+                existing.images = norm.images
+            if raw.price is not None and raw.price > 0 and existing.price != raw.price:
+                record_price(db, existing, raw.price)
+                existing.price = raw.price
+            updated += 1
+            continue
+
+        row = Listing(
+            source=norm.source,
+            external_id=norm.external_id,
+            url=norm.url,
+            title=norm.title,
+            year=norm.year,
+            make=norm.make,
+            model=norm.model,
+            price=norm.price,
+            city=norm.city,
+            state=norm.state,
+            zip_code=norm.zip_code,
+            images=norm.images,
+            posted_at=norm.posted_at,
+            raw={"source": "extension_batch"},
+            dedup_key=compute_dedup_key(norm),
+            classification=Classification.UNCLASSIFIED.value,
+        )
+        db.add(row)
+        if norm.price is not None and norm.price > 0:
+            db.flush()
+            record_price(db, row, norm.price)
+        inserted += 1
+
+    return IngestBatchOut(
+        accepted=accepted, inserted=inserted, updated=updated, rejected=rejected
+    )
 
 
 @router.get("/sources/extension/lookup", response_model=LookupOut)
