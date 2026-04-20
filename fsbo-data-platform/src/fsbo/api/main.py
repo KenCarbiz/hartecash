@@ -2,6 +2,7 @@ from fastapi import FastAPI
 
 from fsbo.api.routes import (
     activity,
+    admin,
     ai,
     extension_ingest,
     leads,
@@ -29,6 +30,7 @@ app.include_router(activity.router)
 app.include_router(extension_ingest.router)
 app.include_router(saved_searches.router)
 app.include_router(valuation.router)
+app.include_router(admin.router)
 
 
 @app.get("/health")
