@@ -19,6 +19,7 @@ dependencies = [
     "python-dateutil>=2.9",
     "structlog>=24.4",
     "apscheduler>=3.10",
+    "python-multipart>=0.0.20",
 ]
 
 [project.optional-dependencies]

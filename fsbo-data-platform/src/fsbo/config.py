@@ -13,5 +13,13 @@ class Settings(BaseSettings):
     proxy_url: str = ""
     log_level: str = "INFO"
 
+    # Twilio messaging. Leave blank to disable SMS send (returns a no-op
+    # response that still records the Message row with status=skipped).
+    twilio_account_sid: str = ""
+    twilio_auth_token: str = ""
+    twilio_messaging_service_sid: str = ""  # preferred, for A2P 10DLC
+    twilio_from_number: str = ""  # fallback if no messaging service
+    twilio_status_callback: str = ""  # public https URL for delivery status
+
 
 settings = Settings()

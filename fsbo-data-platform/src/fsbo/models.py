@@ -150,6 +150,31 @@ class WebhookSubscription(Base):
     )
 
 
+class Message(Base):
+    """Outbound/inbound SMS tied to a lead. Wraps Twilio's Message resource."""
+
+    __tablename__ = "messages"
+    __table_args__ = (
+        Index("ix_messages_lead", "lead_id"),
+        Index("ix_messages_twilio_sid", "twilio_sid"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    dealer_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    lead_id: Mapped[int | None] = mapped_column(Integer)
+    direction: Mapped[str] = mapped_column(String(16), nullable=False)
+    from_number: Mapped[str | None] = mapped_column(String(32))
+    to_number: Mapped[str | None] = mapped_column(String(32))
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), default="queued", nullable=False)
+    error_code: Mapped[str | None] = mapped_column(String(32))
+    twilio_sid: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class PriceHistory(Base):
     """Log every price change we observe on a listing. Drops = motivation signal;
     increases = owner correcting a mistake."""

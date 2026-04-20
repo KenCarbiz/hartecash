@@ -462,6 +462,25 @@ export async function bumpActivity(body: {
   });
 }
 
+// ---------- messaging ----------
+
+export interface SendSmsResult {
+  message_id: number;
+  twilio_sid: string | null;
+  status: string;
+  error: string | null;
+}
+
+export async function sendSms(leadId: number, body: string, to?: string): Promise<SendSmsResult> {
+  const res = await fetch(buildUrl("/messages/send"), {
+    method: "POST",
+    headers: crmHeaders(),
+    body: JSON.stringify({ lead_id: leadId, body, to_number: to ?? null }),
+  });
+  if (!res.ok) throw new FsboApiError(`FSBO API ${res.status}`, res.status, await res.text());
+  return (await res.json()) as SendSmsResult;
+}
+
 export async function addInteraction(
   leadId: number,
   kind: InteractionKind,

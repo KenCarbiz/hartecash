@@ -6,7 +6,7 @@ import type { MessageTemplate } from "@/lib/api";
 import {
   composeOpenerAction,
   renderTemplateAction,
-  logSentMessageAction,
+  sendSmsAction,
 } from "@/app/listings/[id]/compose-actions";
 
 type Tone = "direct" | "friendly" | "cash-buyer";
@@ -62,19 +62,26 @@ export function ComposePanel({
     });
   };
 
-  const logAndOpen = (method: "sms" | "copy") => {
-    if (!message.trim()) return;
+  const sendText = () => {
+    if (!message.trim() || !leadId) return;
     startTransition(async () => {
-      if (leadId) {
-        await logSentMessageAction(leadId, listingId, message, source);
-      }
-      if (method === "sms" && sellerPhone) {
-        const url = `sms:${sellerPhone}?body=${encodeURIComponent(message)}`;
-        window.location.href = url;
+      const res = await sendSmsAction(leadId, listingId, message);
+      if (res.status === "skipped") {
+        setError(
+          "Twilio not configured — message saved but not sent. Configure TWILIO_* env vars.",
+        );
+      } else if (res.status === "failed") {
+        setError(res.error ?? "Send failed");
       } else {
-        await navigator.clipboard.writeText(message);
+        setError(null);
+        setMessage("");
       }
     });
+  };
+
+  const copyMessage = () => {
+    if (!message.trim()) return;
+    navigator.clipboard.writeText(message);
   };
 
   return (
@@ -154,7 +161,7 @@ export function ComposePanel({
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={() => logAndOpen("copy")}
+              onClick={copyMessage}
               disabled={!message.trim() || pending}
               className="btn-secondary text-xs"
             >
@@ -162,11 +169,11 @@ export function ComposePanel({
             </button>
             <button
               type="button"
-              onClick={() => logAndOpen("sms")}
-              disabled={!message.trim() || !sellerPhone || pending}
+              onClick={sendText}
+              disabled={!message.trim() || !sellerPhone || !leadId || pending}
               className="btn-primary text-xs"
             >
-              Open SMS →
+              {pending ? "Sending…" : "Send text →"}
             </button>
           </div>
         </div>

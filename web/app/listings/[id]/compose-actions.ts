@@ -8,6 +8,7 @@ import {
   bumpActivity,
   FsboApiError,
   renderTemplate,
+  sendSms,
 } from "@/lib/api";
 
 export async function composeOpenerAction(
@@ -46,4 +47,20 @@ export async function logSentMessageAction(
   await bumpActivity({ messages_sent: 1 }).catch(() => {});
   void source;
   revalidatePath(`/listings/${listingId}`);
+}
+
+export async function sendSmsAction(
+  leadId: number,
+  listingId: number,
+  body: string,
+): Promise<{ status: string; error: string | null }> {
+  try {
+    const res = await sendSms(leadId, body);
+    await bumpActivity({ messages_sent: 1 }).catch(() => {});
+    revalidatePath(`/listings/${listingId}`);
+    return { status: res.status, error: res.error };
+  } catch (err) {
+    const msg = err instanceof FsboApiError ? err.message : "Send failed";
+    return { status: "failed", error: msg };
+  }
 }

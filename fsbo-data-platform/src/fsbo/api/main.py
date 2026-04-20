@@ -7,6 +7,7 @@ from fsbo.api.routes import (
     extension_ingest,
     leads,
     listings,
+    messages,
     saved_searches,
     templates,
     valuation,
@@ -31,6 +32,7 @@ app.include_router(extension_ingest.router)
 app.include_router(saved_searches.router)
 app.include_router(valuation.router)
 app.include_router(admin.router)
+app.include_router(messages.router)
 
 
 @app.get("/health")
