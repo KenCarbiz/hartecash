@@ -120,6 +120,114 @@ export function formatMileage(value: number | null): string {
   return `${new Intl.NumberFormat("en-US").format(value)} mi`;
 }
 
+// ---------- CRM ----------
+
+export type LeadStatus =
+  | "new"
+  | "contacted"
+  | "negotiating"
+  | "appointment"
+  | "purchased"
+  | "lost";
+
+export type InteractionKind =
+  | "note"
+  | "call"
+  | "text"
+  | "email"
+  | "task"
+  | "status_change";
+
+export interface Lead {
+  id: number;
+  dealer_id: string;
+  listing_id: number;
+  assigned_to: string | null;
+  status: LeadStatus;
+  offered_price: number | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Interaction {
+  id: number;
+  lead_id: number;
+  kind: InteractionKind;
+  direction: string | null;
+  actor: string | null;
+  body: string | null;
+  due_at: string | null;
+  completed_at: string | null;
+  meta: Record<string, unknown>;
+  created_at: string;
+}
+
+// Demo-only dealer ID. Replace with auth-derived value once auth lands.
+const DEMO_DEALER_ID = process.env.DEMO_DEALER_ID ?? "demo-dealer";
+
+function crmHeaders(dealerId: string = DEMO_DEALER_ID): HeadersInit {
+  return { "X-Dealer-Id": dealerId, "Content-Type": "application/json" };
+}
+
+export async function getLeadForListing(listingId: number): Promise<Lead | null> {
+  const res = await fetch(buildUrl(`/leads/by-listing/${listingId}`), {
+    headers: crmHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new FsboApiError(`FSBO API ${res.status}`, res.status, await res.text());
+  const body = await res.text();
+  if (!body || body === "null") return null;
+  return JSON.parse(body) as Lead;
+}
+
+export async function createLead(listingId: number, assignedTo?: string): Promise<Lead> {
+  const res = await fetch(buildUrl("/leads"), {
+    method: "POST",
+    headers: crmHeaders(),
+    body: JSON.stringify({ listing_id: listingId, assigned_to: assignedTo ?? null }),
+  });
+  if (!res.ok) throw new FsboApiError(`FSBO API ${res.status}`, res.status, await res.text());
+  return (await res.json()) as Lead;
+}
+
+export async function patchLead(
+  leadId: number,
+  patch: Partial<Pick<Lead, "status" | "assigned_to" | "offered_price" | "notes">>,
+): Promise<Lead> {
+  const res = await fetch(buildUrl(`/leads/${leadId}`), {
+    method: "PATCH",
+    headers: crmHeaders(),
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) throw new FsboApiError(`FSBO API ${res.status}`, res.status, await res.text());
+  return (await res.json()) as Lead;
+}
+
+export async function listInteractions(leadId: number): Promise<Interaction[]> {
+  const res = await fetch(buildUrl(`/leads/${leadId}/interactions`), {
+    headers: crmHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new FsboApiError(`FSBO API ${res.status}`, res.status, await res.text());
+  return (await res.json()) as Interaction[];
+}
+
+export async function addInteraction(
+  leadId: number,
+  kind: InteractionKind,
+  body: string,
+  direction?: string,
+): Promise<Interaction> {
+  const res = await fetch(buildUrl(`/leads/${leadId}/interactions`), {
+    method: "POST",
+    headers: crmHeaders(),
+    body: JSON.stringify({ kind, body, direction: direction ?? null }),
+  });
+  if (!res.ok) throw new FsboApiError(`FSBO API ${res.status}`, res.status, await res.text());
+  return (await res.json()) as Interaction;
+}
+
 export function formatRelativeDate(value: string | null): string {
   if (!value) return "—";
   const then = new Date(value);

@@ -27,6 +27,24 @@ class Classification(StrEnum):
     UNCERTAIN = "uncertain"
 
 
+class LeadStatus(StrEnum):
+    NEW = "new"
+    CONTACTED = "contacted"
+    NEGOTIATING = "negotiating"
+    APPOINTMENT = "appointment"
+    PURCHASED = "purchased"
+    LOST = "lost"
+
+
+class InteractionKind(StrEnum):
+    NOTE = "note"
+    CALL = "call"
+    TEXT = "text"
+    EMAIL = "email"
+    TASK = "task"
+    STATUS_CHANGE = "status_change"
+
+
 class SourceName(StrEnum):
     CRAIGSLIST = "craigslist"
     EBAY_MOTORS = "ebay_motors"
@@ -118,6 +136,52 @@ class WebhookSubscription(Base):
     event: Mapped[str] = mapped_column(String(64), nullable=False, default="listing.created")
     filters: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     active: Mapped[bool] = mapped_column(default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class Lead(Base):
+    """A dealer's claim on a listing. One listing can have multiple leads if
+    multiple dealers work the same seller, but within a single dealer
+    (dealer_id), a listing has at most one lead."""
+
+    __tablename__ = "leads"
+    __table_args__ = (
+        UniqueConstraint("dealer_id", "listing_id", name="uq_lead_dealer_listing"),
+        Index("ix_leads_status", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    dealer_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    listing_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    assigned_to: Mapped[str | None] = mapped_column(String(128))
+    status: Mapped[str] = mapped_column(String(32), default=LeadStatus.NEW.value, nullable=False)
+    offered_price: Mapped[float | None] = mapped_column(Float)
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class Interaction(Base):
+    """Log entry on a lead: calls, texts, notes, tasks, status changes."""
+
+    __tablename__ = "interactions"
+    __table_args__ = (Index("ix_interactions_lead_created", "lead_id", "created_at"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    lead_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    direction: Mapped[str | None] = mapped_column(String(16))  # outbound | inbound
+    actor: Mapped[str | None] = mapped_column(String(128))
+    body: Mapped[str | None] = mapped_column(Text)
+    due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    meta: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

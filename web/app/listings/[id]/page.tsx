@@ -1,10 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { LeadPanel } from "@/components/LeadPanel";
 import {
   formatMileage,
   formatPrice,
   formatRelativeDate,
+  getLeadForListing,
   getListing,
+  listInteractions,
 } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
@@ -43,6 +46,9 @@ export default async function ListingDetailPage({
 
   const listing = await getListing(listingId);
   if (!listing) notFound();
+
+  const lead = await getLeadForListing(listingId).catch(() => null);
+  const interactions = lead ? await listInteractions(lead.id).catch(() => []) : [];
 
   const tag = CLASS_STYLES[listing.classification] ?? CLASS_STYLES.unclassified;
   const vehicleLine = [listing.year, listing.make, listing.model, listing.trim]
@@ -139,6 +145,11 @@ export default async function ListingDetailPage({
           </a>
         )}
       </div>
+
+      <section>
+        <h2 className="mb-3 text-lg font-semibold">Lead workspace</h2>
+        <LeadPanel listingId={listing.id} lead={lead} interactions={interactions} />
+      </section>
 
       <div className="text-xs text-slate-500">
         First seen {formatRelativeDate(listing.first_seen_at)} · last updated{" "}
