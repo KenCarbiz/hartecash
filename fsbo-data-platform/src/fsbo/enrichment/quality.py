@@ -57,6 +57,7 @@ def score_listing(
     title_brand: str | None = None,
     price_velocity_per_day: float = 0.0,
     authenticity_score: int = 0,
+    phone_line_type_score: int = 0,
     now: datetime | None = None,
 ) -> QualityResult:
     """Compute a 0..100 lead quality score + auto-hide verdict.
@@ -221,6 +222,10 @@ def score_listing(
     # --- Phone provided at all (signal of a real seller) ---
     if getattr(listing, "seller_phone", None):
         bd["phone_provided"] = 3
+
+    # --- Carrier / line-type (VoIP = scam tell; mobile = authentic) ---
+    if phone_line_type_score:
+        bd["phone_line_type"] = phone_line_type_score
 
     # --- Confirmed title brand (paid NMVTIS check) ---
     if title_brand:
