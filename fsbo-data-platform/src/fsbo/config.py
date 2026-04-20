@@ -21,5 +21,9 @@ class Settings(BaseSettings):
     twilio_from_number: str = ""  # fallback if no messaging service
     twilio_status_callback: str = ""  # public https URL for delivery status
 
+    # Marketcheck — legal paid aggregator for Autotrader/Cars.com/CarGurus
+    # content we deliberately don't scrape. Blank = adapter yields nothing.
+    marketcheck_api_key: str = ""
+
 
 settings = Settings()

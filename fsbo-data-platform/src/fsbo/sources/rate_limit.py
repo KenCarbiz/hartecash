@@ -44,6 +44,15 @@ _BUCKETS: dict[str, TokenBucket] = {
     "ebay_motors": TokenBucket(capacity=50, refill_per_sec=5.0),     # real API, generous
     "offerup": TokenBucket(capacity=10, refill_per_sec=0.2),         # 1 req / 5s
     "facebook_marketplace": TokenBucket(capacity=5, refill_per_sec=0.05),  # extension-driven
+    "ksl": TokenBucket(capacity=20, refill_per_sec=0.5),
+    "privateauto": TokenBucket(capacity=20, refill_per_sec=0.3),
+    "bring_a_trailer": TokenBucket(capacity=10, refill_per_sec=0.2),
+    "recycler": TokenBucket(capacity=10, refill_per_sec=0.2),
+    "hemmings": TokenBucket(capacity=15, refill_per_sec=0.3),
+    "classic_cars": TokenBucket(capacity=15, refill_per_sec=0.3),
+    "bookoo": TokenBucket(capacity=10, refill_per_sec=0.2),
+    "el_clasificado": TokenBucket(capacity=10, refill_per_sec=0.2),
+    "marketcheck": TokenBucket(capacity=100, refill_per_sec=10.0),   # paid API, generous
     "default": TokenBucket(capacity=20, refill_per_sec=0.5),
 }
 

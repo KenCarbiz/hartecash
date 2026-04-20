@@ -12,7 +12,7 @@ const KNOWN_SOURCES = [
     key: "craigslist",
     label: "Craigslist",
     status: "live",
-    description: "RSS feeds per city. Polite rate limit.",
+    description: "RSS feeds per city. Designed for programmatic use.",
   },
   {
     key: "ebay_motors",
@@ -21,28 +21,64 @@ const KNOWN_SOURCES = [
     description: "Official Browse API. Requires EBAY_APP_ID + EBAY_CERT_ID.",
   },
   {
-    key: "offerup",
-    label: "OfferUp",
-    status: "proxy-required",
-    description: "Set PROXY_URL and legal-review before enabling.",
-  },
-  {
     key: "ksl",
     label: "KSL Classifieds",
     status: "live",
-    description: "Intermountain West FSBO (UT/ID/WY/NV). JSON-LD Vehicle blocks.",
+    description: "Intermountain West FSBO (UT/ID/WY/NV). ~95% private.",
   },
   {
     key: "privateauto",
     label: "PrivateAuto",
     status: "live",
-    description: "100% FSBO platform (founded 2022). Parses __NEXT_DATA__.",
+    description: "100% FSBO platform (founded 2022). Fastest-growing.",
   },
   {
     key: "bring_a_trailer",
     label: "Bring a Trailer",
     status: "live",
-    description: "Enthusiast auctions. Walks index + fetches per-listing JSON-LD.",
+    description: "Enthusiast auctions, collector/modern-classic cars.",
+  },
+  {
+    key: "recycler",
+    label: "Recycler",
+    status: "live",
+    description: "LA/SoCal classifieds, ~70% FSBO, legacy brand.",
+  },
+  {
+    key: "hemmings",
+    label: "Hemmings",
+    status: "live",
+    description: "Classic & collector FSBO. Paid listings = quality.",
+  },
+  {
+    key: "classic_cars",
+    label: "ClassicCars.com",
+    status: "live",
+    description: "Classic/collector marketplace, national coverage.",
+  },
+  {
+    key: "bookoo",
+    label: "Bookoo",
+    status: "live",
+    description: "Military-base communities, ~80% FSBO PCS-move inventory.",
+  },
+  {
+    key: "el_clasificado",
+    label: "El Clasificado",
+    status: "live",
+    description: "Spanish-language CA/TX FSBO. Latino-market inventory.",
+  },
+  {
+    key: "offerup",
+    label: "OfferUp",
+    status: "proxy-required",
+    description: "Set PROXY_URL and complete legal review before enabling.",
+  },
+  {
+    key: "marketcheck",
+    label: "Marketcheck",
+    status: "license-required",
+    description: "Licensed feed of Autotrader/Cars.com/CarGurus/Edmunds. Set MARKETCHECK_API_KEY.",
   },
   {
     key: "facebook_marketplace",
@@ -55,6 +91,7 @@ const KNOWN_SOURCES = [
 const STATUS_STYLE: Record<string, string> = {
   live: "bg-emerald-100 text-emerald-800 border-emerald-200",
   "proxy-required": "bg-amber-100 text-amber-800 border-amber-200",
+  "license-required": "bg-indigo-100 text-indigo-800 border-indigo-200",
   extension: "bg-sky-100 text-sky-800 border-sky-200",
   planned: "bg-ink-100 text-ink-600 border-ink-200",
 };
