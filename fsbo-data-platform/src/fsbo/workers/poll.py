@@ -13,11 +13,16 @@ from sqlalchemy import select
 
 from fsbo.db import session_scope
 from fsbo.enrichment.attributes import extract as extract_attrs
+from fsbo.enrichment.authenticity import score_authenticity
 from fsbo.enrichment.classifier import classify
 from fsbo.enrichment.dealer_signals import assess as assess_dealer
 from fsbo.enrichment.dedup import compute_dedup_key
 from fsbo.enrichment.phone_graph import count_other_listings
-from fsbo.enrichment.price_tracking import count_drops, record_price
+from fsbo.enrichment.price_tracking import (
+    count_drops,
+    price_velocity_per_day,
+    record_price,
+)
 from fsbo.enrichment.quality import score_listing
 from fsbo.enrichment.vin import decode_mismatches_listing, decode_vin
 from fsbo.logging import configure, get_logger
@@ -123,6 +128,8 @@ async def upsert(norm: NormalizedListing) -> bool:
                         / 86400
                     )
                     market = estimate_market(db, existing)
+                    velocity = price_velocity_per_day(db, existing.id)
+                    auth = score_authenticity(existing.description)
                     q = score_listing(
                         existing,
                         market={"median": market.median, "sample_size": market.sample_size},
@@ -133,9 +140,13 @@ async def upsert(norm: NormalizedListing) -> bool:
                         scam_score=existing.scam_score,
                         price_drops=drops,
                         days_on_market=dom,
+                        price_velocity_per_day=velocity,
+                        authenticity_score=int(auth["authenticity_score"]),
                     )
                     existing.lead_quality_score = q.score
                     existing.quality_breakdown = q.breakdown
+                    existing.auto_hidden = q.auto_hide
+                    existing.auto_hide_reason = q.auto_hide_reason
             return False
 
         # Pre-extract attributes and stamp them into raw for scoring.
@@ -223,6 +234,7 @@ async def upsert(norm: NormalizedListing) -> bool:
         # --- Lead quality score ---
         market = estimate_market(db, row)
         market_ctx = {"median": market.median, "sample_size": market.sample_size}
+        auth = score_authenticity(norm.description)
         q = score_listing(
             row,
             market=market_ctx,
@@ -232,6 +244,7 @@ async def upsert(norm: NormalizedListing) -> bool:
             price_drops=0,
             days_on_market=0,
             vin_vpic_mismatch=vpic_mismatch,
+            authenticity_score=int(auth["authenticity_score"]),
         )
         row.lead_quality_score = q.score
         row.auto_hidden = q.auto_hide

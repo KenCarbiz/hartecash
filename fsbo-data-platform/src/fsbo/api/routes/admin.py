@@ -16,8 +16,9 @@ from sqlalchemy.orm import Session
 
 from fsbo.db import get_session
 from fsbo.enrichment.attributes import extract as extract_attrs
+from fsbo.enrichment.authenticity import score_authenticity
 from fsbo.enrichment.dealer_signals import assess as assess_dealer
-from fsbo.enrichment.price_tracking import count_drops
+from fsbo.enrichment.price_tracking import count_drops, price_velocity_per_day
 from fsbo.enrichment.quality import score_listing
 from fsbo.models import Listing
 from fsbo.sources.base import NormalizedListing
@@ -74,6 +75,8 @@ def rescore_all(
 
         market = estimate_market(db, row)
         drops = count_drops(db, row.id)
+        velocity = price_velocity_per_day(db, row.id)
+        auth = score_authenticity(row.description)
         dom = None
         posted = row.posted_at or row.first_seen_at
         if posted:
@@ -87,6 +90,8 @@ def rescore_all(
             scam_score=row.scam_score,
             price_drops=drops,
             days_on_market=dom,
+            price_velocity_per_day=velocity,
+            authenticity_score=int(auth["authenticity_score"]),
             now=now,
         )
         row.lead_quality_score = q.score

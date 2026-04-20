@@ -55,6 +55,8 @@ def score_listing(
     relist_detected: bool = False,
     vin_vpic_mismatch: bool = False,
     title_brand: str | None = None,
+    price_velocity_per_day: float = 0.0,
+    authenticity_score: int = 0,
     now: datetime | None = None,
 ) -> QualityResult:
     """Compute a 0..100 lead quality score + auto-hide verdict.
@@ -163,6 +165,22 @@ def score_listing(
     # --- Relist detection: came back after a gap = motivated ---
     if relist_detected:
         bd["relist_detected"] = 8
+
+    # --- Price velocity: aggressive drop rate = urgent seller ---
+    # $50/day+ = actively reducing price every week or two.
+    if price_velocity_per_day >= 100:
+        bd["price_velocity"] = 8
+    elif price_velocity_per_day >= 50:
+        bd["price_velocity"] = 5
+    elif price_velocity_per_day >= 20:
+        bd["price_velocity"] = 2
+
+    # --- Authenticity (typos + colloquialisms = real human) ---
+    if authenticity_score > 0:
+        bd["authenticity"] = min(5, authenticity_score)
+    elif authenticity_score < 0:
+        # Corporate/AI-boilerplate phrasing penalty
+        bd["boilerplate_copy"] = max(-5, authenticity_score)
 
     # --- End-of-month timing: car-payment-due motivation ---
     if now.day >= 28:

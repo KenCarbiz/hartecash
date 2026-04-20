@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from fsbo.db import get_session
 from fsbo.enrichment.attributes import extract as extract_attrs
+from fsbo.enrichment.authenticity import score_authenticity
 from fsbo.enrichment.classifier import classify
 from fsbo.enrichment.dealer_signals import assess as assess_dealer
 from fsbo.enrichment.dedup import compute_dedup_key
@@ -198,6 +199,7 @@ async def ingest(
 
     market = estimate_market(db, row)
     market_ctx = {"median": market.median, "sample_size": market.sample_size}
+    auth = score_authenticity(norm.description)
     q = score_listing(
         row,
         market=market_ctx,
@@ -206,6 +208,7 @@ async def ingest(
         scam_score=row.scam_score,
         price_drops=0,
         days_on_market=0,
+        authenticity_score=int(auth["authenticity_score"]),
     )
     row.lead_quality_score = q.score
     row.quality_breakdown = q.breakdown

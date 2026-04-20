@@ -60,3 +60,20 @@ def last_price_change_at(db: Session, listing_id: int) -> datetime | None:
         .limit(1)
     )
     return last.observed_at if last else None
+
+
+def price_velocity_per_day(db: Session, listing_id: int) -> float:
+    """Average dollars dropped per day since the first price observation.
+    Positive = getting cheaper (motivated seller); 0 or negative = not dropping.
+    """
+    rows = db.scalars(
+        select(PriceHistory)
+        .where(PriceHistory.listing_id == listing_id)
+        .order_by(PriceHistory.observed_at.asc())
+    ).all()
+    if len(rows) < 2:
+        return 0.0
+    first, last = rows[0], rows[-1]
+    days = max(1.0, (last.observed_at - first.observed_at).total_seconds() / 86400.0)
+    drop = float(first.price) - float(last.price)
+    return drop / days  # positive when price went down over time
