@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 
 from fsbo.db import session_scope
+from fsbo.enrichment.attributes import extract as extract_attrs
 from fsbo.enrichment.classifier import classify
 from fsbo.enrichment.dealer_signals import assess as assess_dealer
 from fsbo.enrichment.dedup import compute_dedup_key
@@ -137,6 +138,11 @@ async def upsert(norm: NormalizedListing) -> bool:
                     existing.quality_breakdown = q.breakdown
             return False
 
+        # Pre-extract attributes and stamp them into raw for scoring.
+        attrs = extract_attrs(norm)
+        enriched_raw = dict(norm.raw or {})
+        enriched_raw["attributes"] = attrs.as_dict()
+
         row = Listing(
             source=norm.source,
             external_id=norm.external_id,
@@ -159,7 +165,7 @@ async def upsert(norm: NormalizedListing) -> bool:
             seller_phone=norm.seller_phone,
             images=norm.images,
             posted_at=norm.posted_at,
-            raw=norm.raw,
+            raw=enriched_raw,
             dedup_key=compute_dedup_key(norm),
             classification=Classification.UNCLASSIFIED.value,
         )

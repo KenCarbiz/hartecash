@@ -41,6 +41,8 @@ function parseQuery(searchParams: Record<string, string | string[] | undefined>)
     classification: cls === undefined ? "private_seller" : (cls as Classification | ""),
     min_score: n("min_score"),
     sort,
+    near_zip: s("near_zip") || undefined,
+    radius_miles: n("radius_miles"),
     limit: n("limit") ?? 50,
     offset: n("offset") ?? 0,
   };

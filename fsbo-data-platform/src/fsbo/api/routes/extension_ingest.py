@@ -18,6 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from fsbo.db import get_session
+from fsbo.enrichment.attributes import extract as extract_attrs
 from fsbo.enrichment.classifier import classify
 from fsbo.enrichment.dealer_signals import assess as assess_dealer
 from fsbo.enrichment.dedup import compute_dedup_key
@@ -137,6 +138,7 @@ async def ingest(
             existing.images = norm.images
         return IngestOut(listing_id=existing.id, duplicate=True)
 
+    attrs = extract_attrs(norm)
     row = Listing(
         source=norm.source,
         external_id=norm.external_id,
@@ -156,7 +158,7 @@ async def ingest(
         seller_phone=norm.seller_phone,
         images=norm.images,
         posted_at=norm.posted_at,
-        raw={"source": "extension"},
+        raw={"source": "extension", "attributes": attrs.as_dict()},
         dedup_key=compute_dedup_key(norm),
         classification=Classification.UNCLASSIFIED.value,
     )

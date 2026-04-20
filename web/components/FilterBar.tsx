@@ -32,6 +32,19 @@ export function FilterBar({ current }: FilterBarProps) {
         defaultValue={current.price_max?.toString()}
       />
       <TextInput name="zip" label="ZIP" defaultValue={current.zip} placeholder="33607" />
+      <TextInput
+        name="near_zip"
+        label="Near ZIP"
+        defaultValue={current.near_zip}
+        placeholder="33607"
+      />
+      <TextInput
+        name="radius_miles"
+        label="Radius mi"
+        type="number"
+        defaultValue={current.radius_miles?.toString()}
+        placeholder="100"
+      />
       <Select
         name="classification"
         label="Class"

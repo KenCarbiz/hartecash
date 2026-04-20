@@ -60,6 +60,8 @@ export interface ListingsQuery {
   classification?: Classification | "";
   min_score?: number;
   sort?: "posted_at" | "score" | "price";
+  near_zip?: string;
+  radius_miles?: number;
   limit?: number;
   offset?: number;
 }

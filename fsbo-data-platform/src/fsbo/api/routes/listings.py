@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from fsbo.api.schemas import ListingOut, ListingsPage
 from fsbo.db import get_session
+from fsbo.enrichment.geocode import GeoPoint, geocode, haversine_miles
 from fsbo.models import Classification, Listing
 
 router = APIRouter(prefix="/listings", tags=["listings"])
@@ -23,6 +24,10 @@ def list_listings(
     price_max: float | None = None,
     mileage_max: int | None = None,
     zip_code: str | None = Query(None, alias="zip"),
+    near_zip: str | None = Query(
+        None, description="Center ZIP for radius search (pair with radius_miles)."
+    ),
+    radius_miles: int | None = Query(None, ge=1, le=500),
     q: str | None = Query(None, description="Case-insensitive text search over title/description"),
     classification: str | None = Query(
         Classification.PRIVATE_SELLER.value,
@@ -79,8 +84,30 @@ def list_listings(
     else:
         order_by = [Listing.posted_at.desc().nulls_last(), Listing.id.desc()]
 
-    total = db.scalar(count_stmt) or 0
-    rows = db.scalars(stmt.order_by(*order_by).limit(limit).offset(offset)).all()
+    # Radius search: if near_zip + radius_miles set, geocode the center and
+    # distance-filter in-memory after fetching a bounded candidate set.
+    center: GeoPoint | None = None
+    if near_zip and radius_miles:
+        center = geocode(near_zip)
+
+    if center:
+        # Pull a larger window so we have enough candidates to filter.
+        window = max(limit * 5, 200)
+        rows = list(
+            db.scalars(stmt.order_by(*order_by).limit(window).offset(offset)).all()
+        )
+        filtered = []
+        for r in rows:
+            rp = geocode(r.zip_code) if r.zip_code else None
+            if rp is None:
+                continue
+            if haversine_miles(center, rp) <= radius_miles:
+                filtered.append(r)
+        total = len(filtered)
+        rows = filtered[:limit]
+    else:
+        total = db.scalar(count_stmt) or 0
+        rows = db.scalars(stmt.order_by(*order_by).limit(limit).offset(offset)).all()
 
     return ListingsPage(
         items=[ListingOut.model_validate(r) for r in rows],

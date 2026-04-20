@@ -151,6 +151,24 @@ def score_listing(
     if getattr(listing, "seller_phone", None):
         bd["phone_provided"] = 3
 
+    # --- Attribute-derived signals from the raw-text extractor ---
+    raw = getattr(listing, "raw", {}) or {}
+    attrs = raw.get("attributes") if isinstance(raw, dict) else None
+    if isinstance(attrs, dict):
+        title_type = attrs.get("title_type")
+        if title_type in ("salvage", "rebuilt", "flood", "lemon"):
+            bd["title_type_risk"] = -15
+        elif title_type == "clean":
+            bd["clean_title"] = 3
+        if attrs.get("owner_count") == 1:
+            bd["one_owner"] = 3
+        if attrs.get("has_service_records"):
+            bd["service_records"] = 2
+        if attrs.get("accident_mentioned"):
+            bd["accident_free"] = 2
+        if attrs.get("negotiable") is True:
+            bd["negotiable"] = 4
+
     total = sum(bd.values())
     total = max(0, min(100, total))
     return QualityResult(score=total, breakdown=bd)
