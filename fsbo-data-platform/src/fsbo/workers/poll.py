@@ -246,6 +246,8 @@ def main() -> None:
         params = {"city": args.city, "category": args.category}
     elif args.source == "ebay_motors":
         params = {"q": args.q, "zip_code": args.zip_code, "radius_miles": args.radius, "limit": args.limit}
+    elif args.source == "offerup":
+        params = {"q": args.q, "zip_code": args.zip_code, "radius_miles": args.radius, "limit": args.limit}
 
     asyncio.run(run(args.source, **params))
 
