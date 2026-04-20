@@ -31,6 +31,10 @@ class Attributes:
     has_service_records: bool = False
     accident_mentioned: bool = False
     features: list[str] | None = None
+    # Motivated-seller signals
+    life_event: str | None = None  # moving | divorce | new_baby | job_transfer |
+                                    # need_cash | downsizing | going_electric | must_sell
+    registration_expiring: bool = False
 
     def as_dict(self) -> dict:
         return {
@@ -42,6 +46,8 @@ class Attributes:
             "has_service_records": self.has_service_records,
             "accident_mentioned": self.accident_mentioned,
             "features": self.features or [],
+            "life_event": self.life_event,
+            "registration_expiring": self.registration_expiring,
         }
 
 
@@ -92,6 +98,29 @@ _ACCIDENT_RE = re.compile(r"\b(no\s+accidents?|never\s+wrecked|accident[-\s]?fre
 _NEGOTIABLE_RE = re.compile(r"\b(obo|or\s+best\s+offer|negotiable|open\s+to\s+offers)\b", re.I)
 _FIRM_RE = re.compile(r"\b(firm|price\s+is\s+firm|non[-\s]?negotiable|no\s+low\s?balls)\b", re.I)
 
+# Motivated-seller life-event phrases. Each matched phrase emits a life_event
+# label (first hit wins). Presence of ANY of these is a motivated-seller
+# signal worth ~+4 in the quality score (capped to avoid double-counting).
+# Order matters — first matching pattern wins. More-specific events first;
+# "must_sell" is last because it's a generic urgency signal and should only
+# win when nothing more descriptive matches.
+_LIFE_EVENT_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
+    ("job_transfer", re.compile(r"\b(job transfer|new job|company relocat\w*|relocating me|transferred)\b", re.I)),
+    ("divorce", re.compile(r"\b(divorce|separation|splitting up|ex[- ]spouse)\b", re.I)),
+    ("new_baby", re.compile(r"\b(baby on the way|expecting|new baby|need a family car)\b", re.I)),
+    ("need_cash", re.compile(r"\b(need(s)? (the )?cash|need(s)? money|medical bills|pay(ing)? (for|off) bills)\b", re.I)),
+    ("downsizing", re.compile(r"\b(downsizing|kids moved out|empty nest)\b", re.I)),
+    ("going_electric", re.compile(r"\b(going electric|bought (a|an) (ev|tesla|electric)|switching to (ev|electric))\b", re.I)),
+    ("trading_up", re.compile(r"\b(trading up|upgrad(ing|ed) to|bought (a |an )new)\b", re.I)),
+    ("moving", re.compile(r"\b(moving (out of state|overseas|abroad|cross country)|relocating)\b", re.I)),
+    ("must_sell", re.compile(r"\b(must sell|need(s)? to sell|have to sell|urgent sale|quick sale)\b", re.I)),
+]
+
+_REGISTRATION_EXPIRING = re.compile(
+    r"\b(tags? expire|needs? (to be )?register(ed|ing|)|expired registration|registration (is )?due)\b",
+    re.I,
+)
+
 
 def extract(listing: NormalizedListing) -> Attributes:
     blob = " ".join(filter(None, [listing.title, listing.description]))
@@ -131,5 +160,13 @@ def extract(listing: NormalizedListing) -> Attributes:
         attrs.negotiable = False
     elif _NEGOTIABLE_RE.search(blob):
         attrs.negotiable = True
+
+    for label, pattern in _LIFE_EVENT_PATTERNS:
+        if pattern.search(blob):
+            attrs.life_event = label
+            break
+
+    if _REGISTRATION_EXPIRING.search(blob):
+        attrs.registration_expiring = True
 
     return attrs

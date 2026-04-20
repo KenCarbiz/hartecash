@@ -15,12 +15,20 @@ export function QualityPanel({ listing }: { listing: Listing }) {
       {score !== null && (
         <p className="mt-1 text-xs text-ink-500">
           {score >= 80
-            ? "Hot — call immediately"
-            : score >= 60
-              ? "Warm — text within 1 hour"
-              : score >= 40
+            ? "Hot — call within 2 hours"
+            : score >= 65
+              ? "Warm — call within 24h"
+              : score >= 45
                 ? "Monitor — watch for price drops"
-                : "Cold — likely not worth pursuing"}
+                : score >= 25
+                  ? "Cold — filtered by default"
+                  : "Rejected — hidden from dealer view"}
+        </p>
+      )}
+
+      {listing.auto_hidden && (
+        <p className="mt-2 text-[11px] rounded bg-rose-50 border border-rose-200 px-2 py-1 text-rose-700">
+          Auto-hidden: {listing.auto_hide_reason ?? "hard-reject rules"}
         </p>
       )}
 

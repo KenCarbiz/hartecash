@@ -19,7 +19,7 @@ from fsbo.enrichment.dedup import compute_dedup_key
 from fsbo.enrichment.phone_graph import count_other_listings
 from fsbo.enrichment.price_tracking import count_drops, record_price
 from fsbo.enrichment.quality import score_listing
-from fsbo.enrichment.vin import decode_vin
+from fsbo.enrichment.vin import decode_mismatches_listing, decode_vin
 from fsbo.logging import configure, get_logger
 from fsbo.models import Classification, Listing, ScrapeRun
 from fsbo.sources import REGISTRY
@@ -209,6 +209,17 @@ async def upsert(norm: NormalizedListing) -> bool:
         if norm.price is not None and norm.price > 0:
             record_price(db, row, norm.price)
 
+        # --- Free VIN-vs-listing mismatch check (cloning / typo flag) ---
+        vpic_mismatch = False
+        if norm.vin:
+            try:
+                decoded = await decode_vin(norm.vin)
+                vpic_mismatch = decode_mismatches_listing(
+                    decoded, norm.year, norm.make
+                )
+            except Exception:  # noqa: BLE001
+                vpic_mismatch = False
+
         # --- Lead quality score ---
         market = estimate_market(db, row)
         market_ctx = {"median": market.median, "sample_size": market.sample_size}
@@ -220,8 +231,11 @@ async def upsert(norm: NormalizedListing) -> bool:
             scam_score=row.scam_score,
             price_drops=0,
             days_on_market=0,
+            vin_vpic_mismatch=vpic_mismatch,
         )
         row.lead_quality_score = q.score
+        row.auto_hidden = q.auto_hide
+        row.auto_hide_reason = q.auto_hide_reason
         row.quality_breakdown = q.breakdown
 
         if row.classification == Classification.PRIVATE_SELLER.value:

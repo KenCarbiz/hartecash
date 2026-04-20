@@ -117,6 +117,10 @@ class Listing(Base):
     scam_score: Mapped[float | None] = mapped_column(Float)
     lead_quality_score: Mapped[int | None] = mapped_column(Integer, index=True)
     quality_breakdown: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    # Hard-reject gate. When True the listing is excluded from the default
+    # /listings view; still accessible via explicit ?show_hidden=true.
+    auto_hidden: Mapped[bool] = mapped_column(default=False, nullable=False)
+    auto_hide_reason: Mapped[str | None] = mapped_column(String(64))
 
 
 class ScrapeRun(Base):

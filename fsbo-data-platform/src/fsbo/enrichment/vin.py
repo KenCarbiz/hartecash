@@ -76,3 +76,23 @@ async def decode_vin(vin: str, client: httpx.AsyncClient | None = None) -> Decod
         error_code=_s("ErrorCode"),
         error_text=_s("ErrorText"),
     )
+
+
+def decode_mismatches_listing(
+    decoded: DecodedVin | None,
+    listing_year: int | None,
+    listing_make: str | None,
+) -> bool:
+    """True if the decoded VIN disagrees with what the seller typed in the
+    listing (strong VIN-cloning / typo / fraud signal).
+    """
+    if not decoded or (decoded.error_code and decoded.error_code not in ("", "0")):
+        return False
+    if listing_year and decoded.year and abs(listing_year - decoded.year) >= 2:
+        return True
+    if listing_make and decoded.make:
+        lm = listing_make.strip().lower()
+        dm = decoded.make.strip().lower()
+        if lm and dm and lm != dm and not (lm in dm or dm in lm):
+            return True
+    return False

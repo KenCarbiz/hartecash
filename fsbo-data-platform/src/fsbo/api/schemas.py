@@ -36,6 +36,8 @@ class ListingOut(BaseModel):
     scam_score: float | None = None
     lead_quality_score: int | None = None
     quality_breakdown: dict = {}
+    auto_hidden: bool = False
+    auto_hide_reason: str | None = None
 
     images: list[str]
     posted_at: datetime | None

@@ -33,6 +33,8 @@ export interface Listing {
   scam_score?: number | null;
   lead_quality_score?: number | null;
   quality_breakdown?: Record<string, number>;
+  auto_hidden?: boolean;
+  auto_hide_reason?: string | null;
   images: string[];
   posted_at: string | null;
   first_seen_at: string;

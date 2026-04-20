@@ -35,6 +35,10 @@ def list_listings(
     ),
     min_score: int | None = Query(None, ge=0, le=100),
     sort: str = Query("posted_at", pattern="^(posted_at|score|price)$"),
+    show_hidden: bool = Query(
+        False,
+        description="Include auto-hidden listings (hard-rejected scams, curbstoners, branded titles).",
+    ),
     limit: int = Query(50, le=500),
     offset: int = 0,
 ) -> ListingsPage:
@@ -69,6 +73,8 @@ def list_listings(
         filters.append(Listing.classification == classification)
     if min_score is not None:
         filters.append(Listing.lead_quality_score >= min_score)
+    if not show_hidden:
+        filters.append(Listing.auto_hidden.is_(False))
 
     for f in filters:
         stmt = stmt.where(f)

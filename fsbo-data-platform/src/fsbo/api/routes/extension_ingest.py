@@ -209,6 +209,8 @@ async def ingest(
     )
     row.lead_quality_score = q.score
     row.quality_breakdown = q.breakdown
+    row.auto_hidden = q.auto_hide
+    row.auto_hide_reason = q.auto_hide_reason
 
     return IngestOut(listing_id=row.id, duplicate=False)
 

@@ -49,21 +49,24 @@ def test_dealer_risk_kills_score():
 
 
 def test_fresh_listing_scores_high():
+    # New curve: day 0 = +12 (not +15 — 21-35d window is the peak now)
     listing = MockListing(year=2020)
     result = score_listing(listing, days_on_market=0, now=NOW)
-    assert result.breakdown["days_on_market"] == 15
+    assert result.breakdown["days_on_market"] == 12
 
 
 def test_stale_listing_scores_low():
+    # New curve: day 90 = -3 (day 90+ = -10)
     listing = MockListing(year=2020)
-    result = score_listing(listing, days_on_market=90, now=NOW)
+    result = score_listing(listing, days_on_market=91, now=NOW)
     assert result.breakdown["days_on_market"] == -10
 
 
-def test_ripe_window_gets_small_bonus():
+def test_ripe_window_gets_bonus():
+    # 14 days falls into the pre-peak bucket (8-20 = +6)
     listing = MockListing(year=2020)
     result = score_listing(listing, days_on_market=14, now=NOW)
-    assert result.breakdown["days_on_market"] == 3
+    assert result.breakdown["days_on_market"] == 6
 
 
 def test_price_drops_boost_score():
@@ -82,9 +85,10 @@ def test_curbstoner_phone_penalizes():
 
 
 def test_valid_vin_adds_trust():
+    # key renamed vin_present -> vin_valid in the upgrade
     listing = MockListing(year=2020, vin="1M8GDM9AXKP042788")
     result = score_listing(listing, now=NOW)
-    assert result.breakdown["vin_present"] == 5
+    assert result.breakdown["vin_valid"] == 5
 
 
 def test_score_clamped():

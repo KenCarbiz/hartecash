@@ -91,6 +91,8 @@ def rescore_all(
         )
         row.lead_quality_score = q.score
         row.quality_breakdown = q.breakdown
+        row.auto_hidden = q.auto_hide
+        row.auto_hide_reason = q.auto_hide_reason
         updated += 1
 
     return RescoreOut(total=len(rows), updated=updated)
