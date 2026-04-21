@@ -1,0 +1,34 @@
+# fly.toml for the AutoCurb scheduler (workers) service.
+#
+# MUST be exactly ONE instance — the token-bucket rate limiter and the
+# webhook drain leader are in-process. Running multiple would double-poll.
+#
+# Deploy:
+#   fly launch --no-deploy --copy-config --config fly.scheduler.toml \
+#       --dockerfile Dockerfile --name autocurb-scheduler
+#   fly postgres attach --app autocurb-scheduler autocurb-db
+#   fly secrets set --app autocurb-scheduler \
+#     ANTHROPIC_API_KEY=... \
+#     EMAIL_BACKEND=sendgrid \
+#     SENDGRID_API_KEY=... \
+#     APP_ORIGIN=https://app.autocurb.example
+#   fly deploy --config fly.scheduler.toml
+
+app = "autocurb-scheduler"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[processes]
+  scheduler = "python -m fsbo.workers.scheduler"
+
+[env]
+  PYTHONUNBUFFERED = "1"
+  LOG_LEVEL = "INFO"
+
+[[vm]]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1
+  processes = ["scheduler"]

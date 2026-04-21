@@ -2,9 +2,11 @@ import { headers } from "next/headers";
 import { PageHeader } from "@/components/AppShell";
 import { ApiKeysPanel } from "@/components/ApiKeysPanel";
 import { InvitationsPanel } from "@/components/InvitationsPanel";
+import { NotificationsPanel } from "@/components/NotificationsPanel";
 import {
   FsboApiError,
   getCurrentUser,
+  getNotificationPrefs,
   listApiKeys,
   listInvitations,
 } from "@/lib/api";
@@ -25,6 +27,7 @@ export default async function SettingsPage() {
   if (user?.role === "admin") {
     invites = await listInvitations().catch(() => []);
   }
+  const prefs = await getNotificationPrefs().catch(() => null);
 
   // Build the app origin so we can render full invite URLs.
   const h = await headers();
@@ -58,6 +61,8 @@ export default async function SettingsPage() {
             <Field label="Daily message goal" value="60" />
           </dl>
         </div>
+
+        {prefs && <NotificationsPanel prefs={prefs} />}
 
         <ApiKeysPanel keys={keys} />
 

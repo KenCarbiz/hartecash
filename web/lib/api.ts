@@ -182,6 +182,31 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
   return (await res.json()) as CurrentUser;
 }
 
+// ---------- notification preferences ----------
+
+export interface NotificationPreferences {
+  alerts_enabled: boolean;
+  alert_min_score: number;
+}
+
+export async function getNotificationPrefs(): Promise<NotificationPreferences | null> {
+  const res = await apiFetch("/notifications/preferences");
+  if (!res.ok) return null;
+  return (await res.json()) as NotificationPreferences;
+}
+
+export async function updateNotificationPrefs(
+  patch: Partial<NotificationPreferences>,
+): Promise<NotificationPreferences> {
+  const res = await apiFetch("/notifications/preferences", {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok)
+    throw new FsboApiError(`FSBO API ${res.status}`, res.status, await res.text());
+  return (await res.json()) as NotificationPreferences;
+}
+
 // ---------- source health ----------
 
 export interface SourceHealth {

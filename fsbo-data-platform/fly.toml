@@ -1,0 +1,60 @@
+# fly.toml for the AutoCurb API service.
+#
+# Edit the `app` name to match your Fly org. Deploy:
+#   fly launch --no-deploy --copy-config --dockerfile Dockerfile --name autocurb-api
+#   fly postgres create --name autocurb-db
+#   fly postgres attach --app autocurb-api autocurb-db
+#   fly secrets set \
+#     ENV_MODE=production \
+#     JWT_SECRET=$(openssl rand -hex 32) \
+#     COOKIE_SECURE=true \
+#     COOKIE_DOMAIN=.autocurb.example \
+#     APP_ORIGIN=https://app.autocurb.example \
+#     EMAIL_BACKEND=sendgrid \
+#     SENDGRID_API_KEY=... \
+#     EMAIL_FROM=noreply@autocurb.example
+#   fly deploy
+#
+# Scale down to 1 when enabling the scheduler as a separate process.
+
+app = "autocurb-api"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[deploy]
+  release_command = "alembic upgrade head"
+
+[env]
+  PYTHONUNBUFFERED = "1"
+  LOG_LEVEL = "INFO"
+  ENV_MODE = "production"
+  COOKIE_SECURE = "true"
+  EMAIL_BACKEND = "sendgrid"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = "suspend"
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+  [http_service.concurrency]
+    type = "requests"
+    hard_limit = 200
+    soft_limit = 150
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "15s"
+    method = "get"
+    path = "/health"
+
+[[vm]]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1
+  processes = ["app"]
