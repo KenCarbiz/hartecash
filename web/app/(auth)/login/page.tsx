@@ -12,12 +12,23 @@ export default function LoginPage() {
         Welcome back. Sign in to your acquisition dashboard.
       </p>
       <LoginForm action={loginAction} />
-      <p className="mt-6 text-xs text-ink-500">
-        Don&apos;t have an account?{" "}
-        <Link href="/register" className="text-brand-600 hover:text-brand-700 font-medium">
-          Create one
+      <div className="mt-6 flex items-center justify-between text-xs text-ink-500">
+        <Link
+          href="/forgot-password"
+          className="text-brand-600 hover:text-brand-700"
+        >
+          Forgot password?
         </Link>
-      </p>
+        <span>
+          New here?{" "}
+          <Link
+            href="/register"
+            className="text-brand-600 hover:text-brand-700 font-medium"
+          >
+            Create account
+          </Link>
+        </span>
+      </div>
     </div>
   );
 }
