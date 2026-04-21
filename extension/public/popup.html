@@ -4,13 +4,17 @@
     <meta charset="utf-8" />
     <title>AutoCurb</title>
     <style>
+      :root {
+        color-scheme: light;
+      }
       body {
         margin: 0;
-        font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
+        font-family:
+          "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
         color: #0f172a;
         background: #f8fafc;
-        width: 280px;
-        padding: 14px 16px 16px;
+        width: 320px;
+        padding: 16px 18px 18px;
       }
       h1 {
         font-size: 14px;
@@ -20,16 +24,84 @@
         gap: 8px;
       }
       .logo {
-        width: 20px;
-        height: 20px;
+        width: 22px;
+        height: 22px;
         background: #4f46e5;
         color: #fff;
         display: inline-flex;
         align-items: center;
         justify-content: center;
         font-weight: 700;
-        border-radius: 4px;
+        border-radius: 5px;
         font-size: 12px;
+      }
+      .status {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 12px;
+        margin: 6px 0 12px;
+        border-radius: 8px;
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        font-size: 12px;
+      }
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #94a3b8;
+        flex-shrink: 0;
+      }
+      .dot.ok {
+        background: #10b981;
+      }
+      .dot.bad {
+        background: #ef4444;
+      }
+      .status-text {
+        flex: 1;
+        color: #334155;
+        word-break: break-word;
+      }
+      .counter {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin-bottom: 12px;
+      }
+      .stat {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 10px 12px;
+      }
+      .stat .n {
+        font-size: 20px;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -0.02em;
+      }
+      .stat .l {
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #64748b;
+        margin-top: 2px;
+      }
+      details {
+        border-top: 1px solid #e2e8f0;
+        padding-top: 12px;
+      }
+      details summary {
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 500;
+        color: #475569;
+        user-select: none;
+      }
+      details[open] summary {
+        margin-bottom: 10px;
       }
       label {
         display: block;
@@ -48,7 +120,7 @@
         border-radius: 5px;
         font-size: 12px;
       }
-      button {
+      button.save {
         margin-top: 14px;
         width: 100%;
         padding: 8px;
@@ -60,7 +132,7 @@
         font-size: 12px;
         cursor: pointer;
       }
-      button:hover {
+      button.save:hover {
         background: #4338ca;
       }
       .hint {
@@ -73,54 +145,164 @@
         font-size: 11px;
         color: #059669;
       }
+      .tip {
+        font-size: 11px;
+        color: #334155;
+        background: #eef2ff;
+        border: 1px solid #c7d2fe;
+        border-radius: 6px;
+        padding: 8px 10px;
+        margin-bottom: 12px;
+      }
     </style>
   </head>
   <body>
-    <h1><span class="logo">A</span> AutoCurb settings</h1>
+    <h1><span class="logo">A</span> AutoCurb</h1>
 
-    <label for="apiUrl">API URL</label>
-    <input id="apiUrl" type="url" placeholder="http://localhost:8000" />
+    <div class="status">
+      <div id="dot" class="dot"></div>
+      <div id="status-text" class="status-text">Checking connection…</div>
+    </div>
 
-    <label for="dealerId">Dealer ID</label>
-    <input id="dealerId" type="text" placeholder="demo-dealer" />
+    <div class="counter">
+      <div class="stat">
+        <div id="session-count" class="n">0</div>
+        <div class="l">This session</div>
+      </div>
+      <div class="stat">
+        <div id="total-count" class="n">0</div>
+        <div class="l">Total</div>
+      </div>
+    </div>
 
-    <label for="userLabel">Your name / handle</label>
-    <input id="userLabel" type="text" placeholder="me" />
+    <div id="open-marketplace-tip" class="tip" style="display: none">
+      Open <strong>facebook.com/marketplace</strong> to start harvesting listings
+      as you browse.
+    </div>
 
-    <button id="save">Save settings</button>
-    <p class="hint">
-      The extension overlays AutoCurb tools on Facebook Marketplace and Craigslist
-      listings. It runs in your own browser session — no credentials are stored.
-    </p>
-    <p id="saved" class="saved" style="display: none">✓ Saved</p>
+    <details id="settings">
+      <summary>Settings</summary>
+
+      <label for="apiUrl">API URL</label>
+      <input id="apiUrl" type="url" placeholder="http://localhost:8000" />
+
+      <label for="dealerId">Dealer ID (dev fallback)</label>
+      <input id="dealerId" type="text" placeholder="demo-dealer" />
+
+      <label for="apiKey">API key (production)</label>
+      <input id="apiKey" type="text" placeholder="ac_live_..." />
+
+      <label for="userLabel">Your name / handle</label>
+      <input id="userLabel" type="text" placeholder="me" />
+
+      <button id="save" class="save">Save settings</button>
+      <p class="hint">
+        Paste an ac_live_… API key to authenticate in production. In dev
+        mode the Dealer ID is accepted as a fallback.
+      </p>
+      <p id="saved" class="saved" style="display: none">✓ Saved</p>
+    </details>
 
     <script type="module">
-      const els = {
-        apiUrl: document.getElementById("apiUrl"),
-        dealerId: document.getElementById("dealerId"),
-        userLabel: document.getElementById("userLabel"),
-        save: document.getElementById("save"),
-        saved: document.getElementById("saved"),
-      };
       const DEFAULTS = {
         apiUrl: "http://localhost:8000",
         dealerId: "demo-dealer",
+        apiKey: "",
         userLabel: "me",
       };
-      const stored = await chrome.storage.local.get(DEFAULTS);
+      const els = {
+        apiUrl: document.getElementById("apiUrl"),
+        dealerId: document.getElementById("dealerId"),
+        apiKey: document.getElementById("apiKey"),
+        userLabel: document.getElementById("userLabel"),
+        save: document.getElementById("save"),
+        saved: document.getElementById("saved"),
+        dot: document.getElementById("dot"),
+        statusText: document.getElementById("status-text"),
+        sessionCount: document.getElementById("session-count"),
+        totalCount: document.getElementById("total-count"),
+        settings: document.getElementById("settings"),
+        tip: document.getElementById("open-marketplace-tip"),
+      };
+
+      // -- load settings --
+      const stored = await chrome.storage.local.get({
+        ...DEFAULTS,
+        total_count: 0,
+      });
       els.apiUrl.value = stored.apiUrl;
       els.dealerId.value = stored.dealerId;
+      els.apiKey.value = stored.apiKey || "";
       els.userLabel.value = stored.userLabel;
+      els.totalCount.textContent = String(stored.total_count || 0);
 
+      // Auto-open settings on first run (no api URL configured beyond default
+      // AND no api key set).
+      const firstRun =
+        stored.apiUrl === DEFAULTS.apiUrl &&
+        stored.dealerId === DEFAULTS.dealerId &&
+        !stored.apiKey;
+      if (firstRun) els.settings.open = true;
+
+      // -- save handler --
       els.save.addEventListener("click", async () => {
         await chrome.storage.local.set({
           apiUrl: els.apiUrl.value || DEFAULTS.apiUrl,
           dealerId: els.dealerId.value || DEFAULTS.dealerId,
+          apiKey: els.apiKey.value || "",
           userLabel: els.userLabel.value || DEFAULTS.userLabel,
         });
         els.saved.style.display = "block";
         setTimeout(() => (els.saved.style.display = "none"), 1500);
+        pingHealth();
       });
+
+      // -- session count (populated by content script) --
+      async function refreshSession() {
+        try {
+          const s = await chrome.storage.session.get({ session_count: 0 });
+          els.sessionCount.textContent = String(s.session_count || 0);
+        } catch {
+          // session storage may be unavailable; ignore
+        }
+      }
+      refreshSession();
+      setInterval(refreshSession, 1500);
+
+      // -- connection ping --
+      async function pingHealth() {
+        els.dot.classList.remove("ok", "bad");
+        els.statusText.textContent = "Checking…";
+        const url = (els.apiUrl.value || DEFAULTS.apiUrl).replace(/\/$/, "");
+        try {
+          const resp = await fetch(url + "/health", { method: "GET" });
+          if (resp.ok) {
+            els.dot.classList.add("ok");
+            els.statusText.textContent = "Connected to " + url;
+          } else {
+            els.dot.classList.add("bad");
+            els.statusText.textContent = "API returned " + resp.status;
+          }
+        } catch {
+          els.dot.classList.add("bad");
+          els.statusText.textContent = "Can't reach " + url;
+        }
+      }
+      pingHealth();
+
+      // -- marketplace tip when not on FB --
+      try {
+        const [tab] = await chrome.tabs.query({
+          active: true,
+          currentWindow: true,
+        });
+        const url = tab?.url || "";
+        if (!/facebook\.com\/marketplace/.test(url)) {
+          els.tip.style.display = "block";
+        }
+      } catch {
+        // ignore
+      }
     </script>
   </body>
 </html>

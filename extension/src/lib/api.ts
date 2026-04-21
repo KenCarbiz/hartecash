@@ -30,12 +30,14 @@ export interface IngestListing {
 export interface Settings {
   apiUrl: string;
   dealerId: string;
+  apiKey: string;
   userLabel: string;
 }
 
 export const DEFAULTS: Settings = {
   apiUrl: "http://localhost:8000",
   dealerId: "demo-dealer",
+  apiKey: "",
   userLabel: "me",
 };
 
