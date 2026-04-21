@@ -703,6 +703,39 @@ export async function listTemplates(category?: string): Promise<MessageTemplate[
   return (await res.json()) as MessageTemplate[];
 }
 
+export async function createTemplate(
+  name: string,
+  category: string,
+  body: string,
+): Promise<MessageTemplate> {
+  const res = await apiFetch("/templates", {
+    method: "POST",
+    body: JSON.stringify({ name, category, body }),
+  });
+  if (!res.ok)
+    throw new FsboApiError(`FSBO API ${res.status}`, res.status, await res.text());
+  return (await res.json()) as MessageTemplate;
+}
+
+export async function updateTemplate(
+  id: number,
+  patch: Partial<Pick<MessageTemplate, "name" | "category" | "body">>,
+): Promise<MessageTemplate> {
+  const res = await apiFetch(`/templates/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok)
+    throw new FsboApiError(`FSBO API ${res.status}`, res.status, await res.text());
+  return (await res.json()) as MessageTemplate;
+}
+
+export async function deleteTemplate(id: number): Promise<void> {
+  const res = await apiFetch(`/templates/${id}`, { method: "DELETE" });
+  if (!res.ok && res.status !== 204)
+    throw new FsboApiError(`FSBO API ${res.status}`, res.status, await res.text());
+}
+
 export async function renderTemplate(
   templateId: number,
   listingId: number,

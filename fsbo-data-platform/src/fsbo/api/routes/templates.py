@@ -74,6 +74,35 @@ def create_template(
     return TemplateOut.model_validate(tpl)
 
 
+class TemplatePatch(BaseModel):
+    name: str | None = None
+    category: str | None = None
+    body: str | None = None
+    is_default: bool | None = None
+
+
+@router.patch("/templates/{template_id}", response_model=TemplateOut)
+def update_template(
+    template_id: int,
+    payload: TemplatePatch,
+    dealer_id: DealerIdHeader,
+    db: Annotated[Session, Depends(get_session)],
+) -> TemplateOut:
+    tpl = db.get(MessageTemplate, template_id)
+    if not tpl or tpl.dealer_id != dealer_id:
+        raise HTTPException(404, "template not found")
+    if payload.name is not None:
+        tpl.name = payload.name
+    if payload.category is not None:
+        tpl.category = payload.category
+    if payload.body is not None:
+        tpl.body = payload.body
+    if payload.is_default is not None:
+        tpl.is_default = payload.is_default
+    db.flush()
+    return TemplateOut.model_validate(tpl)
+
+
 @router.delete("/templates/{template_id}", status_code=204)
 def delete_template(
     template_id: int,

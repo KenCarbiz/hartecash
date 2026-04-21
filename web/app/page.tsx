@@ -1,7 +1,15 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/AppShell";
 import { BattleTracker } from "@/components/BattleTracker";
-import { FsboApiError, formatPrice, formatRelativeDate, listLeads, listListings } from "@/lib/api";
+import {
+  FsboApiError,
+  formatPrice,
+  formatRelativeDate,
+  listLeads,
+  listListings,
+  listSavedSearches,
+} from "@/lib/api";
 
 interface KpiProps {
   label: string;
@@ -67,6 +75,14 @@ const LEAD_STATUS_STYLES: Record<string, string> = {
 };
 
 export default async function Home() {
+  // First-run redirect: new dealers with zero saved searches land on
+  // /welcome to pick their geography + makes before seeing the empty
+  // dashboard. Users who have at least one saved search skip this.
+  const saved = await listSavedSearches().catch(() => []);
+  if (saved.length === 0) {
+    redirect("/welcome");
+  }
+
   const data = await loadData();
 
   const activeLeads = data.leads.filter(

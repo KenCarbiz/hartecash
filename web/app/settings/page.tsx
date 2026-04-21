@@ -3,12 +3,14 @@ import { PageHeader } from "@/components/AppShell";
 import { ApiKeysPanel } from "@/components/ApiKeysPanel";
 import { InvitationsPanel } from "@/components/InvitationsPanel";
 import { NotificationsPanel } from "@/components/NotificationsPanel";
+import { TemplatesPanel } from "@/components/TemplatesPanel";
 import {
   FsboApiError,
   getCurrentUser,
   getNotificationPrefs,
   listApiKeys,
   listInvitations,
+  listTemplates,
 } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
@@ -28,6 +30,7 @@ export default async function SettingsPage() {
     invites = await listInvitations().catch(() => []);
   }
   const prefs = await getNotificationPrefs().catch(() => null);
+  const templates = await listTemplates().catch(() => []);
 
   // Build the app origin so we can render full invite URLs.
   const h = await headers();
@@ -63,6 +66,8 @@ export default async function SettingsPage() {
         </div>
 
         {prefs && <NotificationsPanel prefs={prefs} />}
+
+        <TemplatesPanel templates={templates} />
 
         <ApiKeysPanel keys={keys} />
 
