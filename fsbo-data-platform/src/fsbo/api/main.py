@@ -5,6 +5,7 @@ from fsbo.api.routes import (
     admin,
     ai,
     api_keys,
+    auth,
     extension_ingest,
     leads,
     listings,
@@ -37,6 +38,7 @@ app.include_router(admin.router)
 app.include_router(messages.router)
 app.include_router(source_health.router)
 app.include_router(api_keys.router)
+app.include_router(auth.router)
 
 
 @app.get("/health")

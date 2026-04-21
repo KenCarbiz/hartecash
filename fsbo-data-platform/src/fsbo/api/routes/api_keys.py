@@ -6,24 +6,29 @@ sending `Authorization: Bearer ac_live_...` or `X-Api-Key: ac_live_...`.
 A valid key sets the dealer context in lieu of `X-Dealer-Id`.
 """
 
-import hashlib
 import secrets
 from datetime import datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from fsbo.auth.api_key_resolver import (
+    TOKEN_PREFIX,
+    hash_token as _hash_token,
+    resolve_dealer_from_token,
+)
+from fsbo.auth.resolver import DealerId
 from fsbo.db import get_session
 from fsbo.models import ApiKey
 
 router = APIRouter(prefix="/api-keys", tags=["api-keys"])
 
-DealerIdHeader = Annotated[str, Header(alias="X-Dealer-Id")]
-
-TOKEN_PREFIX = "ac_live_"
+# Re-exported so existing imports `from fsbo.api.routes.api_keys import
+# resolve_dealer_from_token` keep working.
+__all__ = ["router", "resolve_dealer_from_token"]
 
 
 class ApiKeyIn(BaseModel):
@@ -46,29 +51,10 @@ class ApiKeyCreated(ApiKeyOut):
     token: str  # shown ONCE on creation
 
 
-def _hash_token(token: str) -> str:
-    return hashlib.sha256(token.encode()).hexdigest()
-
-
-def resolve_dealer_from_token(db: Session, token: str | None) -> str | None:
-    """Look up dealer_id for a bearer token; touches last_used_at on hit."""
-    if not token or not token.startswith(TOKEN_PREFIX):
-        return None
-    key = db.scalar(
-        select(ApiKey).where(
-            ApiKey.token_hash == _hash_token(token), ApiKey.revoked_at.is_(None)
-        )
-    )
-    if not key:
-        return None
-    key.last_used_at = datetime.now(timezone.utc)
-    return key.dealer_id
-
-
 @router.post("", response_model=ApiKeyCreated, status_code=201)
 def create_key(
     payload: ApiKeyIn,
-    dealer_id: DealerIdHeader,
+    dealer_id: DealerId,
     db: Annotated[Session, Depends(get_session)],
 ) -> ApiKeyCreated:
     secret = secrets.token_urlsafe(32)
@@ -95,7 +81,7 @@ def create_key(
 
 @router.get("", response_model=list[ApiKeyOut])
 def list_keys(
-    dealer_id: DealerIdHeader, db: Annotated[Session, Depends(get_session)]
+    dealer_id: DealerId, db: Annotated[Session, Depends(get_session)]
 ) -> list[ApiKeyOut]:
     rows = db.scalars(
         select(ApiKey)
@@ -108,7 +94,7 @@ def list_keys(
 @router.post("/{key_id}/revoke", response_model=ApiKeyOut)
 def revoke_key(
     key_id: int,
-    dealer_id: DealerIdHeader,
+    dealer_id: DealerId,
     db: Annotated[Session, Depends(get_session)],
 ) -> ApiKeyOut:
     key = db.get(ApiKey, key_id)

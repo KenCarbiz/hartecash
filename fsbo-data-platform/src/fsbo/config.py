@@ -25,5 +25,18 @@ class Settings(BaseSettings):
     # content we deliberately don't scrape. Blank = adapter yields nothing.
     marketcheck_api_key: str = ""
 
+    # Auth.
+    # env_mode: "dev" allows X-Dealer-Id header fallback; "production"
+    # requires a real session cookie or API key.
+    env_mode: str = "dev"
+    # MUST be overridden in production via JWT_SECRET env var; HS256 wants >=32 bytes.
+    jwt_secret: str = "change-me-in-production-dev-only-32-bytes-min"
+    jwt_alg: str = "HS256"
+    # How long a signed-in session lasts (days).
+    session_days: int = 14
+    # Public cookie domain, if needed for cross-subdomain setups.
+    cookie_domain: str = ""
+    cookie_secure: bool = False  # set True in production (HTTPS only)
+
 
 settings = Settings()

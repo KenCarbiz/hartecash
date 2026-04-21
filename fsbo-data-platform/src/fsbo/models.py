@@ -154,6 +154,42 @@ class WebhookSubscription(Base):
     )
 
 
+class Dealer(Base):
+    """Organization that owns listings, leads, API keys, users. The dealer_id
+    string on every scoped row references Dealer.slug (not Dealer.id) so
+    existing rows with 'demo-dealer' don't have to migrate."""
+
+    __tablename__ = "dealers"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    slug: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class User(Base):
+    """A person who logs in. Belongs to one dealer. Password is bcrypt-hashed."""
+
+    __tablename__ = "users"
+    __table_args__ = (
+        UniqueConstraint("email", name="uq_users_email"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    email: Mapped[str] = mapped_column(String(256), nullable=False, index=True)
+    password_hash: Mapped[str] = mapped_column(String(256), nullable=False)
+    name: Mapped[str | None] = mapped_column(String(256))
+    dealer_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    role: Mapped[str] = mapped_column(String(32), default="member", nullable=False)
+    is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class ApiKey(Base):
     """Dealer-scoped API key. Used by the browser extension and any other
     programmatic integrations. The token is stored as a SHA-256 hash; only
