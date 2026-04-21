@@ -361,6 +361,171 @@ def listing_stats(
     )
 
 
+class VehicleFileSource(BaseModel):
+    id: int
+    source: str
+    external_id: str
+    url: str
+    price: float | None
+    first_seen_at: datetime
+    posted_at: datetime | None
+
+
+class VehicleFilePriceHistoryRow(BaseModel):
+    price: float
+    delta: float | None
+    observed_at: datetime
+    source: str  # which source recorded this price
+
+
+class VehicleFile(BaseModel):
+    """Unified vehicle view across every duplicate listing we've detected.
+
+    Given any listing id, collapses all listings sharing its dedup_key
+    into one record with the min/max price seen, the oldest first_seen_at,
+    the union of images, and the full merged price history timeline.
+    """
+
+    primary_listing_id: int
+    dedup_key: str | None
+    title: str | None
+    year: int | None
+    make: str | None
+    model: str | None
+    trim: str | None
+    mileage: int | None
+    vin: str | None
+    city: str | None
+    state: str | None
+
+    min_price: float | None
+    max_price: float | None
+    latest_price: float | None
+    price_drop_pct: float | None  # (max_price - latest) / max_price * 100
+
+    oldest_first_seen_at: datetime | None
+    days_on_market: int | None
+    total_sources: int
+    sources: list[VehicleFileSource]
+
+    images: list[str]
+    price_history: list[VehicleFilePriceHistoryRow]
+
+
+@router.get("/listings/{listing_id}/vehicle-file", response_model=VehicleFile)
+def vehicle_file(
+    listing_id: int, db: Annotated[Session, Depends(get_session)]
+) -> VehicleFile:
+    base = db.get(Listing, listing_id)
+    if not base:
+        raise HTTPException(404, "listing not found")
+
+    # Collect this listing + every duplicate sharing its dedup_key.
+    if base.dedup_key:
+        rows = list(
+            db.scalars(
+                select(Listing).where(Listing.dedup_key == base.dedup_key)
+            ).all()
+        )
+    else:
+        rows = [base]
+    # Always include the primary, deduped by id.
+    rows_by_id = {r.id: r for r in rows}
+    rows_by_id[base.id] = base
+    rows = list(rows_by_id.values())
+
+    prices = [r.price for r in rows if r.price is not None and r.price > 0]
+    min_price = min(prices) if prices else None
+    max_price = max(prices) if prices else None
+
+    # Latest price = most-recently-updated row's price
+    latest_row = max(rows, key=lambda r: r.last_seen_at)
+    latest_price = latest_row.price
+
+    price_drop_pct: float | None = None
+    if max_price and max_price > 0 and latest_price is not None:
+        price_drop_pct = round(
+            max(0.0, (max_price - latest_price) / max_price * 100), 1
+        )
+
+    # SQLite can return either naive or aware datetimes depending on how
+    # the row was inserted. Normalize before min() to avoid TypeError.
+    def _as_utc(dt: datetime) -> datetime:
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+    first_seen = min(_as_utc(r.first_seen_at) for r in rows)
+    now = datetime.now(timezone.utc)
+    days_on_market = max(
+        0, int((now - first_seen).total_seconds() / 86400)
+    )
+
+    # Merge images (dedup preserving order — prefer the primary row's first).
+    merged_images: list[str] = []
+    seen_images: set[str] = set()
+    for r in sorted(rows, key=lambda r: r.id != base.id):
+        for img in (r.images or []):
+            if img not in seen_images:
+                seen_images.add(img)
+                merged_images.append(img)
+
+    # Merged price history across every source.
+    history_rows = db.execute(
+        select(PriceHistory, Listing.source)
+        .join(Listing, Listing.id == PriceHistory.listing_id)
+        .where(PriceHistory.listing_id.in_([r.id for r in rows]))
+        .order_by(PriceHistory.observed_at.asc())
+    ).all()
+    merged_history = [
+        VehicleFilePriceHistoryRow(
+            price=float(p.price),
+            delta=float(p.delta) if p.delta is not None else None,
+            observed_at=p.observed_at,
+            source=src,
+        )
+        for (p, src) in history_rows
+    ]
+
+    sources = sorted(
+        [
+            VehicleFileSource(
+                id=r.id,
+                source=r.source,
+                external_id=r.external_id,
+                url=r.url,
+                price=r.price,
+                first_seen_at=r.first_seen_at,
+                posted_at=r.posted_at,
+            )
+            for r in rows
+        ],
+        key=lambda s: _as_utc(s.first_seen_at),
+    )
+
+    return VehicleFile(
+        primary_listing_id=base.id,
+        dedup_key=base.dedup_key,
+        title=base.title,
+        year=base.year,
+        make=base.make,
+        model=base.model,
+        trim=base.trim,
+        mileage=base.mileage,
+        vin=base.vin,
+        city=base.city,
+        state=base.state,
+        min_price=min_price,
+        max_price=max_price,
+        latest_price=latest_price,
+        price_drop_pct=price_drop_pct,
+        oldest_first_seen_at=first_seen,
+        days_on_market=days_on_market,
+        total_sources=len(rows),
+        sources=sources,
+        images=merged_images[:8],
+        price_history=merged_history,
+    )
+
+
 @router.get("/listings/{listing_id}/duplicates", response_model=list[DuplicateRow])
 def duplicates_of(
     listing_id: int, db: Annotated[Session, Depends(get_session)]

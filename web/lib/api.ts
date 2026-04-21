@@ -544,6 +544,82 @@ export interface DuplicateRow {
   dedup_key: string | null;
 }
 
+export interface VehicleFileSource {
+  id: number;
+  source: string;
+  external_id: string;
+  url: string;
+  price: number | null;
+  first_seen_at: string;
+  posted_at: string | null;
+}
+
+export interface VehicleFilePriceHistoryRow {
+  price: number;
+  delta: number | null;
+  observed_at: string;
+  source: string;
+}
+
+export interface VehicleFile {
+  primary_listing_id: number;
+  dedup_key: string | null;
+  title: string | null;
+  year: number | null;
+  make: string | null;
+  model: string | null;
+  trim: string | null;
+  mileage: number | null;
+  vin: string | null;
+  city: string | null;
+  state: string | null;
+  min_price: number | null;
+  max_price: number | null;
+  latest_price: number | null;
+  price_drop_pct: number | null;
+  oldest_first_seen_at: string | null;
+  days_on_market: number | null;
+  total_sources: number;
+  sources: VehicleFileSource[];
+  images: string[];
+  price_history: VehicleFilePriceHistoryRow[];
+}
+
+export async function getVehicleFile(
+  listingId: number,
+): Promise<VehicleFile | null> {
+  const res = await apiFetch(`/listings/${listingId}/vehicle-file`);
+  if (!res.ok) return null;
+  return (await res.json()) as VehicleFile;
+}
+
+export interface FunnelStage {
+  label: string;
+  key: string;
+  count: number;
+}
+
+export interface FunnelSourceRow {
+  source: string;
+  listings: number;
+  leads_claimed: number;
+  leads_purchased: number;
+}
+
+export interface FunnelResponse {
+  dealer_id: string;
+  since: string;
+  until: string;
+  stages: FunnelStage[];
+  sources: FunnelSourceRow[];
+}
+
+export async function getFunnel(days: number = 30): Promise<FunnelResponse | null> {
+  const res = await apiFetch(`/analytics/funnel?days=${days}`);
+  if (!res.ok) return null;
+  return (await res.json()) as FunnelResponse;
+}
+
 export async function listDuplicates(listingId: number): Promise<DuplicateRow[]> {
   const res = await apiFetch(buildUrl(`/listings/${listingId}/duplicates`), {
     cache: "no-store",
