@@ -28,6 +28,7 @@ from fsbo.enrichment.price_tracking import record_price
 from fsbo.enrichment.quality import score_listing
 from fsbo.enrichment.seller_graph import (
     max_component_size,
+    max_posting_hour_signal,
     register_listing_identities,
 )
 from fsbo.enrichment.vin import decode_vin
@@ -186,6 +187,7 @@ async def ingest(
     )
     register_listing_identities(db, row)
     cluster_size = max(phone_count, max_component_size(db, row.id))
+    hour_signal = max_posting_hour_signal(db, row.id)
 
     extras: dict[str, bool] = {}
     if cluster_size >= 3:
@@ -227,6 +229,7 @@ async def ingest(
         price_drops=0,
         days_on_market=0,
         authenticity_score=int(auth["authenticity_score"]),
+        posting_hour_score=hour_signal,
     )
     row.lead_quality_score = q.score
     row.quality_breakdown = q.breakdown

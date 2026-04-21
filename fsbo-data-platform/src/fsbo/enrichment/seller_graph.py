@@ -27,6 +27,11 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from fsbo.enrichment.posting_hour import (
+    hour_of_week_slot,
+    posting_pattern_signal,
+    summarize_histogram,
+)
 from fsbo.models import SellerIdentity, SellerIdentityLink
 
 EMAIL_RE = re.compile(r"\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b")
@@ -82,6 +87,22 @@ def link_listing(db: Session, listing_id: int, identity: SellerIdentity) -> bool
     return True
 
 
+def _bump_histogram(ident: SellerIdentity, listing) -> None:
+    """Increment the ident's hour-of-week histogram for this listing's
+    posting timestamp."""
+    slot = hour_of_week_slot(
+        getattr(listing, "posted_at", None)
+        or getattr(listing, "first_seen_at", None)
+    )
+    if slot is None:
+        return
+    # JSON dicts store int keys as strings once persisted; normalize up-front.
+    hist = dict(ident.hour_histogram or {})
+    key = str(slot)
+    hist[key] = int(hist.get(key, 0)) + 1
+    ident.hour_histogram = hist
+
+
 def register_listing_identities(db: Session, listing) -> list[SellerIdentity]:
     """Extract every identifying signal we can from the listing and record
     it in the graph. Returns the list of identities linked."""
@@ -91,6 +112,7 @@ def register_listing_identities(db: Session, listing) -> list[SellerIdentity]:
     if phone:
         ident = upsert_identity(db, "phone", phone)
         if link_listing(db, listing.id, ident):
+            _bump_histogram(ident, listing)
             identities.append(ident)
 
     blob = " ".join(
@@ -105,6 +127,7 @@ def register_listing_identities(db: Session, listing) -> list[SellerIdentity]:
     for email in extract_emails(blob):
         ident = upsert_identity(db, "email", email)
         if link_listing(db, listing.id, ident):
+            _bump_histogram(ident, listing)
             identities.append(ident)
 
     # Image-background phashes flow in from the Chrome extension or a
@@ -117,9 +140,42 @@ def register_listing_identities(db: Session, listing) -> list[SellerIdentity]:
             if isinstance(ph, str) and len(ph) >= 8:
                 ident = upsert_identity(db, "image_phash", ph.lower())
                 if link_listing(db, listing.id, ident):
+                    _bump_histogram(ident, listing)
                     identities.append(ident)
 
     return identities
+
+
+def max_posting_hour_signal(db: Session, listing_id: int) -> int:
+    """Return the best (most negative) posting-hour signal across all
+    identities this listing is linked to.
+
+    Negative = dealer/day-job pattern; positive = authentic private
+    seller pattern; 0 = no signal.
+    """
+    idents = db.scalars(
+        select(SellerIdentity)
+        .join(
+            SellerIdentityLink,
+            SellerIdentityLink.identity_id == SellerIdentity.id,
+        )
+        .where(SellerIdentityLink.listing_id == listing_id)
+    ).all()
+
+    best = 0  # most negative wins; positive signals only used when no negative
+    any_positive = False
+    for ident in idents:
+        # JSON keys come back as strings; convert to int slots.
+        hist = {int(k): int(v) for k, v in (ident.hour_histogram or {}).items()}
+        summary = summarize_histogram(hist)
+        signal = posting_pattern_signal(summary)
+        if signal < best:
+            best = signal
+        if signal > 0:
+            any_positive = True
+    if best < 0:
+        return best
+    return 2 if any_positive else 0
 
 
 def max_component_size(

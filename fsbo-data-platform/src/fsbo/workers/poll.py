@@ -26,6 +26,7 @@ from fsbo.enrichment.price_tracking import (
 from fsbo.enrichment.quality import score_listing
 from fsbo.enrichment.seller_graph import (
     max_component_size,
+    max_posting_hour_signal,
     register_listing_identities,
 )
 from fsbo.enrichment.vin import decode_mismatches_listing, decode_vin
@@ -195,6 +196,7 @@ async def upsert(norm: NormalizedListing) -> bool:
         # --- Seller-identity graph: stronger curbstoner detection ---
         register_listing_identities(db, row)
         cluster_size = max(phone_count, max_component_size(db, row.id))
+        hour_signal = max_posting_hour_signal(db, row.id)
 
         # --- Dealer signal aggregation (research-backed rulebook) ---
         extras: dict[str, bool] = {}
@@ -253,6 +255,7 @@ async def upsert(norm: NormalizedListing) -> bool:
             days_on_market=0,
             vin_vpic_mismatch=vpic_mismatch,
             authenticity_score=int(auth["authenticity_score"]),
+            posting_hour_score=hour_signal,
         )
         row.lead_quality_score = q.score
         row.auto_hidden = q.auto_hide

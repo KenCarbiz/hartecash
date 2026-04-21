@@ -172,6 +172,8 @@ class SellerIdentity(Base):
     kind: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     value: Mapped[str] = mapped_column(String(256), nullable=False, index=True)
     listing_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # 168-slot posting-hour histogram: {slot: count} where slot = weekday*24 + hour.
+    hour_histogram: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     first_seen_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

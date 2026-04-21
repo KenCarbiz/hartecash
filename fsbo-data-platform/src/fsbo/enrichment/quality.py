@@ -58,6 +58,7 @@ def score_listing(
     price_velocity_per_day: float = 0.0,
     authenticity_score: int = 0,
     phone_line_type_score: int = 0,
+    posting_hour_score: int = 0,
     now: datetime | None = None,
 ) -> QualityResult:
     """Compute a 0..100 lead quality score + auto-hide verdict.
@@ -226,6 +227,10 @@ def score_listing(
     # --- Carrier / line-type (VoIP = scam tell; mobile = authentic) ---
     if phone_line_type_score:
         bd["phone_line_type"] = phone_line_type_score
+
+    # --- Posting-hour fingerprint (day-job vs evening/weekend) ---
+    if posting_hour_score:
+        bd["posting_hours"] = posting_hour_score
 
     # --- Confirmed title brand (paid NMVTIS check) ---
     if title_brand:
