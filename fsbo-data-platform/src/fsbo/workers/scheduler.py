@@ -88,6 +88,17 @@ async def _drain_webhooks() -> None:
             log.warning("scheduler.webhook_drain_failed", error=str(e))
 
 
+async def _run_vin_vision() -> None:
+    # Lazy import so the worker module only loads when this job fires.
+    from fsbo.workers.vin_vision_worker import run as run_vin_vision
+
+    try:
+        stats = await run_vin_vision(max_listings=20)
+        log.info("scheduler.vin_vision_done", **stats)
+    except Exception as e:
+        log.warning("scheduler.vin_vision_failed", error=str(e))
+
+
 async def main() -> None:
     configure()
     plan = _load_plan()
@@ -119,6 +130,17 @@ async def main() -> None:
         _drain_webhooks,
         IntervalTrigger(seconds=30),
         id="webhooks",
+        max_instances=1,
+        coalesce=True,
+    )
+
+    # VIN vision runs every 10 minutes, up to 20 listings per pass, gated
+    # on lead_score >= 55 + price >= $5k so we don't burn money on leads
+    # we'd auto-hide anyway.
+    scheduler.add_job(
+        _run_vin_vision,
+        IntervalTrigger(minutes=10),
+        id="vin_vision",
         max_instances=1,
         coalesce=True,
     )
