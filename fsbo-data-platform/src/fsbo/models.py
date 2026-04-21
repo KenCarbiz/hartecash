@@ -266,6 +266,26 @@ class Invitation(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class NotificationDelivery(Base):
+    """Dedup log: one row per (user, listing, kind) so we don't email a
+    user twice about the same lead."""
+
+    __tablename__ = "notification_deliveries"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "listing_id", "kind", name="uq_notif_user_listing_kind"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    listing_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    sent_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class User(Base):
     """A person who logs in. Belongs to one dealer. Password is bcrypt-hashed."""
 
@@ -285,6 +305,10 @@ class User(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    # Notification preferences (see workers/lead_alerts_worker.py).
+    alerts_enabled: Mapped[bool] = mapped_column(default=True, nullable=False)
+    alert_min_score: Mapped[int] = mapped_column(Integer, default=80, nullable=False)
 
 
 class ApiKey(Base):

@@ -11,6 +11,7 @@ from fsbo.api.routes import (
     leads,
     listings,
     messages,
+    notifications,
     saved_searches,
     source_health,
     templates,
@@ -41,6 +42,7 @@ app.include_router(source_health.router)
 app.include_router(api_keys.router)
 app.include_router(auth.router)
 app.include_router(invitations.router)
+app.include_router(notifications.router)
 
 
 @app.get("/health")

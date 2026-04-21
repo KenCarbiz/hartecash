@@ -109,6 +109,16 @@ async def _run_image_hasher() -> None:
         log.warning("scheduler.image_hash_failed", error=str(e))
 
 
+async def _run_lead_alerts() -> None:
+    from fsbo.workers.lead_alerts_worker import run as run_lead_alerts
+
+    try:
+        stats = await run_lead_alerts(max_listings=200, lookback_minutes=30)
+        log.info("scheduler.lead_alerts_done", **stats)
+    except Exception as e:
+        log.warning("scheduler.lead_alerts_failed", error=str(e))
+
+
 async def main() -> None:
     configure()
     plan = _load_plan()
@@ -161,6 +171,17 @@ async def main() -> None:
         _run_image_hasher,
         IntervalTrigger(minutes=5),
         id="image_hash",
+        max_instances=1,
+        coalesce=True,
+    )
+
+    # Lead alerts — email dealers when a hot listing matches one of their
+    # saved searches. Runs every 2 minutes; NotificationDelivery dedup
+    # guarantees single-fire per (user, listing).
+    scheduler.add_job(
+        _run_lead_alerts,
+        IntervalTrigger(minutes=2),
+        id="lead_alerts",
         max_instances=1,
         coalesce=True,
     )
