@@ -17,6 +17,7 @@ import {
   getMarketEstimate,
   getVehicleFile,
   listInteractions,
+  listTeammates,
   listTemplates,
 } from "@/lib/api";
 
@@ -54,6 +55,7 @@ export default async function ListingDetailPage({
   const lead = await getLeadForListing(listingId).catch(() => null);
   const interactions = lead ? await listInteractions(lead.id).catch(() => []) : [];
   const templates = await listTemplates().catch(() => []);
+  const teammates = await listTeammates().catch(() => []);
   const vehicleFile = await getVehicleFile(listingId).catch(() => null);
   const market = await getMarketEstimate(listingId).catch(() => null);
   const stats = await getListingStats(listingId).catch(() => null);
@@ -179,7 +181,12 @@ export default async function ListingDetailPage({
           <MarketBadge estimate={market} />
           <ListingTimeline stats={stats} />
           <h2 className="text-sm font-semibold text-ink-700 pt-1">Lead workspace</h2>
-          <LeadPanel listingId={listing.id} lead={lead} interactions={interactions} />
+          <LeadPanel
+            listingId={listing.id}
+            lead={lead}
+            interactions={interactions}
+            teammates={teammates}
+          />
           {lead && (
             <ComposePanel
               listingId={listing.id}

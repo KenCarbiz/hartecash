@@ -4,10 +4,14 @@ Dealer scoping: every endpoint takes an X-Dealer-Id header (stubbed auth).
 Real auth will replace this header with JWT-derived dealer context later.
 """
 
+import csv
+import io
+from collections.abc import Iterator
 from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
@@ -19,6 +23,7 @@ from fsbo.models import (
     Lead,
     LeadStatus,
     Listing,
+    User,
 )
 
 router = APIRouter(tags=["crm"])
@@ -170,6 +175,123 @@ def bulk_claim(
         claimed=len(to_claim),
         already_claimed=len(already),
         missing_listings=missing,
+    )
+
+
+class TeammateRow(BaseModel):
+    email: str
+    name: str | None
+    role: str
+
+
+@router.get("/leads/teammates", response_model=list[TeammateRow])
+def list_teammates(
+    dealer_id: DealerIdHeader,
+    db: Annotated[Session, Depends(get_session)],
+) -> list[TeammateRow]:
+    """People at this dealer who can be assigned a lead."""
+    users = db.scalars(
+        select(User).where(
+            User.dealer_id == dealer_id, User.is_active.is_(True)
+        )
+    ).all()
+    return [TeammateRow(email=u.email, name=u.name, role=u.role) for u in users]
+
+
+@router.get("/leads/export.csv")
+def export_leads_csv(
+    dealer_id: DealerIdHeader,
+    db: Annotated[Session, Depends(get_session)],
+    status: LeadStatus | None = None,
+    assigned_to: str | None = None,
+) -> StreamingResponse:
+    """Stream the dealer's leads (joined with listing data) as a CSV."""
+    stmt = (
+        select(Lead, Listing)
+        .join(Listing, Lead.listing_id == Listing.id)
+        .where(Lead.dealer_id == dealer_id)
+    )
+    if status:
+        stmt = stmt.where(Lead.status == status.value)
+    if assigned_to:
+        stmt = stmt.where(Lead.assigned_to == assigned_to)
+    stmt = stmt.order_by(Lead.updated_at.desc())
+
+    def _iter() -> Iterator[str]:
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(
+            [
+                "lead_id",
+                "status",
+                "assigned_to",
+                "offered_price",
+                "created_at",
+                "updated_at",
+                "listing_id",
+                "source",
+                "external_id",
+                "title",
+                "year",
+                "make",
+                "model",
+                "price",
+                "mileage",
+                "city",
+                "state",
+                "zip_code",
+                "seller_phone",
+                "vin",
+                "classification",
+                "lead_quality_score",
+                "url",
+            ]
+        )
+        yield buf.getvalue()
+        buf.seek(0)
+        buf.truncate()
+
+        for lead, listing in db.execute(stmt).all():
+            writer.writerow(
+                [
+                    lead.id,
+                    lead.status,
+                    lead.assigned_to or "",
+                    lead.offered_price if lead.offered_price is not None else "",
+                    lead.created_at.isoformat() if lead.created_at else "",
+                    lead.updated_at.isoformat() if lead.updated_at else "",
+                    listing.id,
+                    listing.source,
+                    listing.external_id,
+                    listing.title or "",
+                    listing.year if listing.year is not None else "",
+                    listing.make or "",
+                    listing.model or "",
+                    listing.price if listing.price is not None else "",
+                    listing.mileage if listing.mileage is not None else "",
+                    listing.city or "",
+                    listing.state or "",
+                    listing.zip_code or "",
+                    listing.seller_phone or "",
+                    listing.vin or "",
+                    listing.classification,
+                    listing.lead_quality_score
+                    if listing.lead_quality_score is not None
+                    else "",
+                    listing.url or "",
+                ]
+            )
+            yield buf.getvalue()
+            buf.seek(0)
+            buf.truncate()
+
+    filename = (
+        f"autocurb_leads_{datetime.now(timezone.utc).strftime('%Y%m%d')}.csv"
+    )
+    return StreamingResponse(
+        _iter(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 

@@ -419,6 +419,18 @@ function crmHeaders(dealerId: string = DEMO_DEALER_ID): HeadersInit {
   return { "X-Dealer-Id": dealerId, "Content-Type": "application/json" };
 }
 
+export interface Teammate {
+  email: string;
+  name: string | null;
+  role: string;
+}
+
+export async function listTeammates(): Promise<Teammate[]> {
+  const res = await apiFetch("/leads/teammates");
+  if (!res.ok) return [];
+  return (await res.json()) as Teammate[];
+}
+
 export async function listLeads(params: {
   status?: LeadStatus;
   assigned_to?: string;

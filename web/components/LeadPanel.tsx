@@ -1,4 +1,11 @@
-import { type Interaction, type Lead, formatPrice, formatRelativeDate } from "@/lib/api";
+import { AssigneeDropdown } from "@/components/AssigneeDropdown";
+import {
+  type Interaction,
+  type Lead,
+  type Teammate,
+  formatPrice,
+  formatRelativeDate,
+} from "@/lib/api";
 import {
   addInteractionAction,
   claimLeadAction,
@@ -36,10 +43,12 @@ export function LeadPanel({
   listingId,
   lead,
   interactions,
+  teammates = [],
 }: {
   listingId: number;
   lead: Lead | null;
   interactions: Interaction[];
+  teammates?: Teammate[];
 }) {
   if (!lead) {
     return (
@@ -72,12 +81,16 @@ export function LeadPanel({
     <div className="space-y-3">
       <div className="panel p-5">
         <div className="flex items-start justify-between gap-3">
-          <div>
+          <div className="flex-1 min-w-0">
             <p className="text-xs text-ink-500">Lead #{lead.id}</p>
-            <p className="mt-0.5 text-sm font-medium">
-              {lead.assigned_to ?? "Unassigned"}
-            </p>
-            <p className="mt-0.5 text-[11px] text-ink-500">
+            <div className="mt-1">
+              <AssigneeDropdown
+                leadId={lead.id}
+                current={lead.assigned_to}
+                teammates={teammates}
+              />
+            </div>
+            <p className="mt-1.5 text-[11px] text-ink-500">
               Updated {formatRelativeDate(lead.updated_at)}
             </p>
           </div>

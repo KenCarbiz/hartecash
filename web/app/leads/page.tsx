@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/AppShell";
+import { AssigneeDropdown } from "@/components/AssigneeDropdown";
 import {
   type Lead,
   type LeadStatus,
@@ -7,7 +8,9 @@ import {
   formatMileage,
   formatPrice,
   formatRelativeDate,
+  getCurrentUser,
   listLeads,
+  listTeammates,
 } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
@@ -30,6 +33,7 @@ const STATUS_ORDER: LeadStatus[] = [
   "lost",
 ];
 
+
 export default async function LeadsPage({
   searchParams,
 }: {
@@ -38,8 +42,13 @@ export default async function LeadsPage({
   const sp = await searchParams;
   const statusParam =
     (Array.isArray(sp.status) ? sp.status[0] : sp.status) || "active";
-  const assignedTo =
+  const assignedToRaw =
     (Array.isArray(sp.assigned_to) ? sp.assigned_to[0] : sp.assigned_to) || undefined;
+  const mineOnly =
+    (Array.isArray(sp.mine) ? sp.mine[0] : sp.mine) === "1";
+
+  const user = await getCurrentUser().catch(() => null);
+  const effectiveAssignedTo = mineOnly ? user?.email : assignedToRaw;
 
   let leads: Lead[] = [];
   let error: string | null = null;
@@ -50,7 +59,7 @@ export default async function LeadsPage({
         : undefined;
     leads = await listLeads({
       status: fetchStatus,
-      assigned_to: assignedTo,
+      assigned_to: effectiveAssignedTo,
       limit: 200,
     });
     if (statusParam === "active") {
@@ -60,24 +69,46 @@ export default async function LeadsPage({
     error = err instanceof FsboApiError ? err.message : "API unreachable";
   }
 
+  const teammates = await listTeammates().catch(() => []);
   const counts = countByStatus(leads);
+
+  // Build CSV export link that preserves current filters.
+  const exportParams = new URLSearchParams();
+  if (STATUS_ORDER.includes(statusParam as LeadStatus)) {
+    exportParams.set("status", statusParam);
+  }
+  if (effectiveAssignedTo) exportParams.set("assigned_to", effectiveAssignedTo);
+  // Route through the Next.js API handler so the session cookie gets
+  // forwarded to the backend (works across different prod subdomains).
+  const exportHref = `/api/leads/export${
+    exportParams.toString() ? `?${exportParams.toString()}` : ""
+  }`;
 
   return (
     <>
       <PageHeader
         title="Leads"
         subtitle={`${leads.length} in view${
-          assignedTo ? ` · assigned to ${assignedTo}` : ""
+          effectiveAssignedTo ? ` · ${effectiveAssignedTo}` : ""
         }`}
         actions={
-          <Link href="/listings" className="btn-primary">
-            Find more listings
-          </Link>
+          <>
+            <a
+              href={exportHref}
+              className="btn-secondary"
+              download
+            >
+              Export CSV
+            </a>
+            <Link href="/listings" className="btn-primary">
+              Find more listings
+            </Link>
+          </>
         }
       />
 
       <div className="mb-4 flex flex-wrap items-center gap-1.5">
-        <StatusChip current={statusParam} value="active" label="Active" />
+        <StatusChip current={statusParam} value="active" label="Active" extraQuery={mineOnly ? "&mine=1" : ""} />
         {STATUS_ORDER.map((s) => (
           <StatusChip
             key={s}
@@ -85,8 +116,29 @@ export default async function LeadsPage({
             value={s}
             label={s.replace("_", " ")}
             count={counts[s]}
+            extraQuery={mineOnly ? "&mine=1" : ""}
           />
         ))}
+
+        {user && (
+          <Link
+            href={
+              mineOnly
+                ? `/leads${statusParam && statusParam !== "active" ? `?status=${statusParam}` : ""}`
+                : `/leads?mine=1${
+                    statusParam && statusParam !== "active" ? `&status=${statusParam}` : ""
+                  }`
+            }
+            className={`ml-2 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${
+              mineOnly
+                ? "bg-brand-600 text-white"
+                : "border border-ink-200 bg-white text-ink-700 hover:bg-ink-50"
+            }`}
+            title="Only leads assigned to me"
+          >
+            My leads
+          </Link>
+        )}
       </div>
 
       {error && (
@@ -147,10 +199,13 @@ export default async function LeadsPage({
                     <td className="px-4 py-3 text-right tabular font-semibold">
                       {formatPrice(l.listing_price ?? null)}
                     </td>
-                    <td className="px-4 py-3 text-ink-700">
-                      {l.assigned_to ?? (
-                        <span className="text-ink-400">Unassigned</span>
-                      )}
+                    <td className="px-4 py-3">
+                      <AssigneeDropdown
+                        leadId={l.id}
+                        current={l.assigned_to}
+                        teammates={teammates}
+                        compact
+                      />
                     </td>
                     <td className="px-4 py-3">
                       <span className={`badge ${STATUS_STYLES[l.status]}`}>
@@ -182,16 +237,22 @@ function StatusChip({
   value,
   label,
   count,
+  extraQuery = "",
 }: {
   current: string;
   value: string;
   label: string;
   count?: number;
+  extraQuery?: string;
 }) {
   const active = current === value;
+  const href =
+    value === "active"
+      ? `/leads${extraQuery.startsWith("&") ? `?${extraQuery.slice(1)}` : ""}`
+      : `/leads?status=${value}${extraQuery}`;
   return (
     <Link
-      href={value === "active" ? "/leads" : `/leads?status=${value}`}
+      href={href}
       className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${
         active
           ? "bg-ink-900 text-white"
@@ -200,9 +261,7 @@ function StatusChip({
     >
       {label}
       {count !== undefined && (
-        <span
-          className={`tabular ${active ? "text-ink-300" : "text-ink-500"}`}
-        >
+        <span className={`tabular ${active ? "text-ink-300" : "text-ink-500"}`}>
           {count}
         </span>
       )}
