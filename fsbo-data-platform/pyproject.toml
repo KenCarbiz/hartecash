@@ -23,6 +23,8 @@ dependencies = [
     "bcrypt>=4.2",
     "pyjwt>=2.10",
     "email-validator>=2.2",
+    "pillow>=11.0",
+    "imagehash>=4.3",
 ]
 
 [project.optional-dependencies]

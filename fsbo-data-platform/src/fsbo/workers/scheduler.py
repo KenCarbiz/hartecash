@@ -99,6 +99,16 @@ async def _run_vin_vision() -> None:
         log.warning("scheduler.vin_vision_failed", error=str(e))
 
 
+async def _run_image_hasher() -> None:
+    from fsbo.workers.image_worker import run as run_image_hasher
+
+    try:
+        stats = await run_image_hasher(max_listings=50)
+        log.info("scheduler.image_hash_done", **stats)
+    except Exception as e:
+        log.warning("scheduler.image_hash_failed", error=str(e))
+
+
 async def main() -> None:
     configure()
     plan = _load_plan()
@@ -141,6 +151,16 @@ async def main() -> None:
         _run_vin_vision,
         IntervalTrigger(minutes=10),
         id="vin_vision",
+        max_instances=1,
+        coalesce=True,
+    )
+
+    # Image pHash worker — cheap (compute only), runs every 5 min so new
+    # listings get added to the seller-graph image cluster fast.
+    scheduler.add_job(
+        _run_image_hasher,
+        IntervalTrigger(minutes=5),
+        id="image_hash",
         max_instances=1,
         coalesce=True,
     )
