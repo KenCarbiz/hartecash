@@ -26,6 +26,10 @@ from fsbo.enrichment.dedup import compute_dedup_key
 from fsbo.enrichment.phone_graph import count_other_listings
 from fsbo.enrichment.price_tracking import record_price
 from fsbo.enrichment.quality import score_listing
+from fsbo.enrichment.seller_graph import (
+    max_component_size,
+    register_listing_identities,
+)
 from fsbo.enrichment.vin import decode_vin
 from fsbo.models import Classification, Listing, PriceHistory
 from fsbo.sources.base import NormalizedListing
@@ -180,10 +184,13 @@ async def ingest(
     phone_count = count_other_listings(
         db, norm.seller_phone, exclude_id=row.id, within_days=30
     )
+    register_listing_identities(db, row)
+    cluster_size = max(phone_count, max_component_size(db, row.id))
+
     extras: dict[str, bool] = {}
-    if phone_count >= 3:
+    if cluster_size >= 3:
         extras["phone_on_3plus_listings_30d"] = True
-    if phone_count >= 5:
+    if cluster_size >= 5:
         extras["phone_on_5plus_listings_90d"] = True
     dealer = assess_dealer(norm, extras)
     row.dealer_likelihood = dealer.likelihood
@@ -214,7 +221,7 @@ async def ingest(
     q = score_listing(
         row,
         market=market_ctx,
-        phone_listing_count=phone_count,
+        phone_listing_count=cluster_size,
         dealer_likelihood=row.dealer_likelihood,
         scam_score=row.scam_score,
         price_drops=0,

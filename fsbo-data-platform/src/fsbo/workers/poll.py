@@ -24,6 +24,10 @@ from fsbo.enrichment.price_tracking import (
     record_price,
 )
 from fsbo.enrichment.quality import score_listing
+from fsbo.enrichment.seller_graph import (
+    max_component_size,
+    register_listing_identities,
+)
 from fsbo.enrichment.vin import decode_mismatches_listing, decode_vin
 from fsbo.logging import configure, get_logger
 from fsbo.models import Classification, Listing, ScrapeRun
@@ -183,10 +187,14 @@ async def upsert(norm: NormalizedListing) -> bool:
         db.add(row)
         db.flush()
 
-        # --- Phone cross-listing check ---
+        # --- Phone cross-listing check (legacy fast path kept) ---
         phone_count = count_other_listings(
             db, norm.seller_phone, exclude_id=row.id, within_days=30
         )
+
+        # --- Seller-identity graph: stronger curbstoner detection ---
+        register_listing_identities(db, row)
+        cluster_size = max(phone_count, max_component_size(db, row.id))
 
         # --- Dealer signal aggregation (research-backed rulebook) ---
         extras: dict[str, bool] = {}
@@ -238,7 +246,7 @@ async def upsert(norm: NormalizedListing) -> bool:
         q = score_listing(
             row,
             market=market_ctx,
-            phone_listing_count=phone_count,
+            phone_listing_count=cluster_size,
             dealer_likelihood=row.dealer_likelihood,
             scam_score=row.scam_score,
             price_drops=0,

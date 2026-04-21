@@ -154,6 +154,51 @@ class WebhookSubscription(Base):
     )
 
 
+class SellerIdentity(Base):
+    """A node in the curbstoner-detection graph.
+
+    Each row is one identifier extracted from a listing (phone number,
+    email, image-background perceptual hash). A seller_identity with
+    listing_count >= 10 is a near-certain curbstoner cluster — use the
+    auto-hide rules to suppress those listings from the dealer feed.
+    """
+
+    __tablename__ = "seller_identities"
+    __table_args__ = (
+        UniqueConstraint("kind", "value", name="uq_seller_identity_kind_value"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    value: Mapped[str] = mapped_column(String(256), nullable=False, index=True)
+    listing_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    first_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class SellerIdentityLink(Base):
+    """Join: listing ↔ seller identity. One listing can reference several
+    identities (phone + email + image hash)."""
+
+    __tablename__ = "seller_identity_links"
+    __table_args__ = (
+        UniqueConstraint(
+            "listing_id", "identity_id", name="uq_seller_identity_link"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    listing_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    identity_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class Dealer(Base):
     """Organization that owns listings, leads, API keys, users. The dealer_id
     string on every scoped row references Dealer.slug (not Dealer.id) so
