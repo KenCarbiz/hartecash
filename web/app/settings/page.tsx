@@ -1,17 +1,36 @@
+import { headers } from "next/headers";
 import { PageHeader } from "@/components/AppShell";
 import { ApiKeysPanel } from "@/components/ApiKeysPanel";
-import { FsboApiError, listApiKeys } from "@/lib/api";
+import { InvitationsPanel } from "@/components/InvitationsPanel";
+import {
+  FsboApiError,
+  getCurrentUser,
+  listApiKeys,
+  listInvitations,
+} from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
   let keys: Awaited<ReturnType<typeof listApiKeys>> = [];
+  let invites: Awaited<ReturnType<typeof listInvitations>> = [];
   let error: string | null = null;
   try {
     keys = await listApiKeys();
   } catch (err) {
     error = err instanceof FsboApiError ? err.message : "API unreachable";
   }
+
+  const user = await getCurrentUser().catch(() => null);
+  if (user?.role === "admin") {
+    invites = await listInvitations().catch(() => []);
+  }
+
+  // Build the app origin so we can render full invite URLs.
+  const h = await headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
+  const proto = h.get("x-forwarded-proto") ?? "http";
+  const appOrigin = `${proto}://${host}`;
 
   return (
     <>
@@ -41,6 +60,10 @@ export default async function SettingsPage() {
         </div>
 
         <ApiKeysPanel keys={keys} />
+
+        {user?.role === "admin" && (
+          <InvitationsPanel invites={invites} appOrigin={appOrigin} />
+        )}
 
         <div className="panel p-5">
           <h2 className="text-sm font-semibold">Twilio messaging</h2>

@@ -256,6 +256,73 @@ export async function createApiKey(name: string): Promise<ApiKeyCreated> {
   return (await res.json()) as ApiKeyCreated;
 }
 
+// ---------- invitations ----------
+
+export interface InvitationRow {
+  id: number;
+  dealer_id: string;
+  email: string;
+  role: string;
+  created_at: string;
+  expires_at: string;
+  accepted_at: string | null;
+  revoked_at: string | null;
+}
+
+export interface InvitationCreated extends InvitationRow {
+  token: string;
+  accept_url_hint: string;
+}
+
+export async function listInvitations(): Promise<InvitationRow[]> {
+  const res = await apiFetch("/invitations");
+  if (!res.ok)
+    throw new FsboApiError(`FSBO API ${res.status}`, res.status, await res.text());
+  return (await res.json()) as InvitationRow[];
+}
+
+export async function createInvitation(
+  email: string,
+  role: string = "member",
+): Promise<InvitationCreated> {
+  const res = await apiFetch("/invitations", {
+    method: "POST",
+    body: JSON.stringify({ email, role }),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new FsboApiError(`FSBO API ${res.status}`, res.status, body);
+  }
+  return (await res.json()) as InvitationCreated;
+}
+
+export async function revokeInvitation(id: number): Promise<InvitationRow> {
+  const res = await apiFetch(`/invitations/${id}/revoke`, { method: "POST" });
+  if (!res.ok)
+    throw new FsboApiError(`FSBO API ${res.status}`, res.status, await res.text());
+  return (await res.json()) as InvitationRow;
+}
+
+export interface InvitationPreview {
+  email: string;
+  role: string;
+  dealer_id: string;
+  dealer_name: string | null;
+  invited_by_email: string | null;
+  expires_at: string;
+}
+
+export async function previewInvitation(
+  token: string,
+): Promise<InvitationPreview | { error: string }> {
+  const res = await apiFetch(`/invitations/preview?token=${encodeURIComponent(token)}`);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    return { error: body.detail || `error ${res.status}` };
+  }
+  return (await res.json()) as InvitationPreview;
+}
+
 export async function revokeApiKey(id: number): Promise<ApiKeyRow> {
   const res = await apiFetch(buildUrl(`/api-keys/${id}/revoke`), {
     method: "POST",

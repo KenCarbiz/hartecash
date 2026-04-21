@@ -216,6 +216,35 @@ class Dealer(Base):
     )
 
 
+class Invitation(Base):
+    """One-time sign-up link for adding teammates to an existing dealer.
+
+    `token_hash` stores SHA-256 of the raw token. The raw token is
+    returned only once at creation, same pattern as API keys. Admins
+    can revoke; expired or revoked invites can't be accepted.
+    """
+
+    __tablename__ = "invitations"
+    __table_args__ = (
+        Index("ix_invitations_token_hash", "token_hash", unique=True),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    dealer_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    email: Mapped[str] = mapped_column(String(256), nullable=False)
+    role: Mapped[str] = mapped_column(String(32), default="member", nullable=False)
+    invited_by: Mapped[int] = mapped_column(Integer, nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class User(Base):
     """A person who logs in. Belongs to one dealer. Password is bcrypt-hashed."""
 
