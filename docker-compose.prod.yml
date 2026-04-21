@@ -1,0 +1,88 @@
+# Production docker-compose reference. For Fly.io / Render / Railway deploys
+# use the individual Dockerfiles in fsbo-data-platform/ and web/ separately.
+#
+# Run: docker compose -f docker-compose.prod.yml up --build -d
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: fsbo
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}
+      POSTGRES_DB: fsbo
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fsbo -d fsbo"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: ./fsbo-data-platform
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://fsbo:${POSTGRES_PASSWORD}@postgres:5432/fsbo
+      ENV_MODE: production
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET required}
+      SESSION_DAYS: "14"
+      COOKIE_SECURE: "true"
+      COOKIE_DOMAIN: ${COOKIE_DOMAIN:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      EBAY_APP_ID: ${EBAY_APP_ID:-}
+      EBAY_CERT_ID: ${EBAY_CERT_ID:-}
+      EBAY_DEV_ID: ${EBAY_DEV_ID:-}
+      MARKETCHECK_API_KEY: ${MARKETCHECK_API_KEY:-}
+      PROXY_URL: ${PROXY_URL:-}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_MESSAGING_SERVICE_SID: ${TWILIO_MESSAGING_SERVICE_SID:-}
+      TWILIO_FROM_NUMBER: ${TWILIO_FROM_NUMBER:-}
+      TWILIO_STATUS_CALLBACK: ${TWILIO_STATUS_CALLBACK:-}
+      LOG_LEVEL: INFO
+    ports:
+      - "8000:8000"
+    # Run migrations on startup. In production with many replicas, run
+    # `alembic upgrade head` as a release command instead.
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn fsbo.api.main:app --host 0.0.0.0 --port 8000
+               --proxy-headers --forwarded-allow-ips='*'"
+
+  scheduler:
+    build:
+      context: ./fsbo-data-platform
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_started
+    environment:
+      DATABASE_URL: postgresql+psycopg://fsbo:${POSTGRES_PASSWORD}@postgres:5432/fsbo
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      EBAY_APP_ID: ${EBAY_APP_ID:-}
+      EBAY_CERT_ID: ${EBAY_CERT_ID:-}
+      EBAY_DEV_ID: ${EBAY_DEV_ID:-}
+      MARKETCHECK_API_KEY: ${MARKETCHECK_API_KEY:-}
+      PROXY_URL: ${PROXY_URL:-}
+      LOG_LEVEL: INFO
+    command: ["python", "-m", "fsbo.workers.scheduler"]
+
+  web:
+    build:
+      context: ./web
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      NODE_ENV: production
+      FSBO_API_URL: ${FSBO_API_URL:-http://api:8000}
+    ports:
+      - "3000:3000"
+
+volumes:
+  pg_data:
