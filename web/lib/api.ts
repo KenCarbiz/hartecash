@@ -70,6 +70,23 @@ export interface ListingsQuery {
 
 const BASE_URL = process.env.FSBO_API_URL ?? "http://localhost:8000";
 
+// Dev-mode header fallback. Production auth comes from the session cookie.
+const DEMO_DEALER_ID = process.env.DEMO_DEALER_ID ?? "demo-dealer";
+
+/** On the server, forward the incoming request's session cookie to the
+ * backend API so RSC fetches are authenticated. No-op in the browser. */
+async function sessionCookie(): Promise<string | undefined> {
+  if (typeof window !== "undefined") return undefined;
+  try {
+    const { cookies } = await import("next/headers");
+    const store = await cookies();
+    const c = store.get("autocurb_session");
+    return c ? `autocurb_session=${c.value}` : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function buildUrl(path: string, query?: Record<string, unknown>): string {
   const url = new URL(path, BASE_URL);
   if (query) {
@@ -91,12 +108,29 @@ export class FsboApiError extends Error {
   }
 }
 
+/** Single entrypoint for all backend calls. Forwards:
+ *  - Cookie (session) on the server
+ *  - X-Dealer-Id dev fallback (stripped in production by the backend)
+ *  - Content-Type: application/json for JSON-body requests
+ *  - Accept: application/json
+ */
+async function apiFetch(pathOrUrl: string, init: RequestInit = {}): Promise<Response> {
+  const url = pathOrUrl.startsWith("http") ? pathOrUrl : buildUrl(pathOrUrl);
+  const cookie = await sessionCookie();
+  const headers: Record<string, string> = { Accept: "application/json" };
+  if (init.body !== undefined && !(init.body instanceof FormData)) {
+    headers["Content-Type"] = "application/json";
+  }
+  if (cookie) headers["Cookie"] = cookie;
+  // Dev-mode fallback. Backend resolver only honors it when ENV_MODE != "production".
+  if (!cookie) headers["X-Dealer-Id"] = DEMO_DEALER_ID;
+  Object.assign(headers, (init.headers as Record<string, string>) ?? {});
+  return fetch(url, { ...init, headers, cache: init.cache ?? "no-store" });
+}
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
-    ...init,
-    headers: { Accept: "application/json", ...(init?.headers ?? {}) },
-    next: { revalidate: 30 },
-  });
+  const path = url.replace(BASE_URL, "");
+  const res = await apiFetch(path, init);
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     throw new FsboApiError(`FSBO API ${res.status}`, res.status, body);
@@ -131,6 +165,23 @@ export function formatMileage(value: number | null): string {
   return `${new Intl.NumberFormat("en-US").format(value)} mi`;
 }
 
+// ---------- auth ----------
+
+export interface CurrentUser {
+  id: number;
+  email: string;
+  name: string | null;
+  dealer_id: string;
+  role: string;
+}
+
+export async function getCurrentUser(): Promise<CurrentUser | null> {
+  const res = await apiFetch("/auth/me");
+  if (res.status === 401) return null;
+  if (!res.ok) return null;
+  return (await res.json()) as CurrentUser;
+}
+
 // ---------- source health ----------
 
 export interface SourceHealth {
@@ -157,15 +208,14 @@ export interface ScrapeRunRow {
 }
 
 export async function getSourceHealth(): Promise<SourceHealth[]> {
-  const res = await fetch(buildUrl("/sources/health"), { cache: "no-store" });
+  const res = await apiFetch(buildUrl("/sources/health"), { cache: "no-store" });
   if (!res.ok) return [];
   return (await res.json()) as SourceHealth[];
 }
 
 export async function getScrapeRuns(source?: string): Promise<ScrapeRunRow[]> {
-  const res = await fetch(
+  const res = await apiFetch(
     buildUrl("/sources/runs", source ? { source, limit: 50 } : { limit: 50 }),
-    { cache: "no-store" },
   );
   if (!res.ok) return [];
   return (await res.json()) as ScrapeRunRow[];
@@ -188,7 +238,7 @@ export interface ApiKeyCreated extends ApiKeyRow {
 }
 
 export async function listApiKeys(): Promise<ApiKeyRow[]> {
-  const res = await fetch(buildUrl("/api-keys"), {
+  const res = await apiFetch(buildUrl("/api-keys"), {
     headers: crmHeaders(),
     cache: "no-store",
   });
@@ -197,7 +247,7 @@ export async function listApiKeys(): Promise<ApiKeyRow[]> {
 }
 
 export async function createApiKey(name: string): Promise<ApiKeyCreated> {
-  const res = await fetch(buildUrl("/api-keys"), {
+  const res = await apiFetch(buildUrl("/api-keys"), {
     method: "POST",
     headers: crmHeaders(),
     body: JSON.stringify({ name }),
@@ -207,7 +257,7 @@ export async function createApiKey(name: string): Promise<ApiKeyCreated> {
 }
 
 export async function revokeApiKey(id: number): Promise<ApiKeyRow> {
-  const res = await fetch(buildUrl(`/api-keys/${id}/revoke`), {
+  const res = await apiFetch(buildUrl(`/api-keys/${id}/revoke`), {
     method: "POST",
     headers: crmHeaders(),
   });
@@ -270,8 +320,9 @@ export interface Interaction {
 }
 
 // Demo-only dealer ID. Replace with auth-derived value once auth lands.
-const DEMO_DEALER_ID = process.env.DEMO_DEALER_ID ?? "demo-dealer";
-
+// crmHeaders retained for backwards compatibility with a few call sites
+// that still inline their own fetch. Prefer apiFetch() which auto-applies
+// cookie + dev-fallback + content-type.
 function crmHeaders(dealerId: string = DEMO_DEALER_ID): HeadersInit {
   return { "X-Dealer-Id": dealerId, "Content-Type": "application/json" };
 }
@@ -282,7 +333,7 @@ export async function listLeads(params: {
   limit?: number;
   offset?: number;
 } = {}): Promise<Lead[]> {
-  const res = await fetch(buildUrl("/leads", params as Record<string, unknown>), {
+  const res = await apiFetch(buildUrl("/leads", params as Record<string, unknown>), {
     headers: crmHeaders(),
     cache: "no-store",
   });
@@ -291,7 +342,7 @@ export async function listLeads(params: {
 }
 
 export async function getLeadForListing(listingId: number): Promise<Lead | null> {
-  const res = await fetch(buildUrl(`/leads/by-listing/${listingId}`), {
+  const res = await apiFetch(buildUrl(`/leads/by-listing/${listingId}`), {
     headers: crmHeaders(),
     cache: "no-store",
   });
@@ -302,7 +353,7 @@ export async function getLeadForListing(listingId: number): Promise<Lead | null>
 }
 
 export async function createLead(listingId: number, assignedTo?: string): Promise<Lead> {
-  const res = await fetch(buildUrl("/leads"), {
+  const res = await apiFetch(buildUrl("/leads"), {
     method: "POST",
     headers: crmHeaders(),
     body: JSON.stringify({ listing_id: listingId, assigned_to: assignedTo ?? null }),
@@ -315,7 +366,7 @@ export async function patchLead(
   leadId: number,
   patch: Partial<Pick<Lead, "status" | "assigned_to" | "offered_price" | "notes">>,
 ): Promise<Lead> {
-  const res = await fetch(buildUrl(`/leads/${leadId}`), {
+  const res = await apiFetch(buildUrl(`/leads/${leadId}`), {
     method: "PATCH",
     headers: crmHeaders(),
     body: JSON.stringify(patch),
@@ -325,7 +376,7 @@ export async function patchLead(
 }
 
 export async function listInteractions(leadId: number): Promise<Interaction[]> {
-  const res = await fetch(buildUrl(`/leads/${leadId}/interactions`), {
+  const res = await apiFetch(buildUrl(`/leads/${leadId}/interactions`), {
     headers: crmHeaders(),
     cache: "no-store",
   });
@@ -346,7 +397,7 @@ export interface MarketEstimate {
 }
 
 export async function getMarketEstimate(listingId: number): Promise<MarketEstimate | null> {
-  const res = await fetch(buildUrl(`/listings/${listingId}/market`), {
+  const res = await apiFetch(buildUrl(`/listings/${listingId}/market`), {
     cache: "no-store",
   });
   if (!res.ok) return null;
@@ -357,7 +408,7 @@ export async function bulkClaim(
   listingIds: number[],
   assignedTo?: string,
 ): Promise<{ claimed: number; already_claimed: number; missing_listings: number[] }> {
-  const res = await fetch(buildUrl("/leads/bulk-claim"), {
+  const res = await apiFetch(buildUrl("/leads/bulk-claim"), {
     method: "POST",
     headers: crmHeaders(),
     body: JSON.stringify({ listing_ids: listingIds, assigned_to: assignedTo ?? null }),
@@ -384,7 +435,7 @@ export interface ListingStats {
 }
 
 export async function getListingStats(listingId: number): Promise<ListingStats | null> {
-  const res = await fetch(buildUrl(`/listings/${listingId}/stats`), {
+  const res = await apiFetch(buildUrl(`/listings/${listingId}/stats`), {
     cache: "no-store",
   });
   if (!res.ok) return null;
@@ -402,7 +453,7 @@ export interface DuplicateRow {
 }
 
 export async function listDuplicates(listingId: number): Promise<DuplicateRow[]> {
-  const res = await fetch(buildUrl(`/listings/${listingId}/duplicates`), {
+  const res = await apiFetch(buildUrl(`/listings/${listingId}/duplicates`), {
     cache: "no-store",
   });
   if (!res.ok) return [];
@@ -422,7 +473,7 @@ export interface SavedSearch {
 }
 
 export async function listSavedSearches(): Promise<SavedSearch[]> {
-  const res = await fetch(buildUrl("/saved-searches"), {
+  const res = await apiFetch(buildUrl("/saved-searches"), {
     headers: crmHeaders(),
     cache: "no-store",
   });
@@ -435,7 +486,7 @@ export async function createSavedSearch(
   query: Record<string, unknown>,
   alertsEnabled = false,
 ): Promise<SavedSearch> {
-  const res = await fetch(buildUrl("/saved-searches"), {
+  const res = await apiFetch(buildUrl("/saved-searches"), {
     method: "POST",
     headers: crmHeaders(),
     body: JSON.stringify({ name, query, alerts_enabled: alertsEnabled }),
@@ -445,7 +496,7 @@ export async function createSavedSearch(
 }
 
 export async function deleteSavedSearch(id: number): Promise<void> {
-  await fetch(buildUrl(`/saved-searches/${id}`), {
+  await apiFetch(buildUrl(`/saved-searches/${id}`), {
     method: "DELETE",
     headers: crmHeaders(),
   });
@@ -476,7 +527,7 @@ export async function renderTemplate(
   templateId: number,
   listingId: number,
 ): Promise<{ template_id: number; rendered: string }> {
-  const res = await fetch(buildUrl(`/templates/${templateId}/render/${listingId}`), {
+  const res = await apiFetch(buildUrl(`/templates/${templateId}/render/${listingId}`), {
     headers: crmHeaders(),
     cache: "no-store",
   });
@@ -490,7 +541,7 @@ export async function aiOpener(
   listingId: number,
   tone: "direct" | "friendly" | "cash-buyer" = "direct",
 ): Promise<{ message: string; tone: string; listing_id: number }> {
-  const res = await fetch(buildUrl("/ai/opener"), {
+  const res = await apiFetch(buildUrl("/ai/opener"), {
     method: "POST",
     headers: crmHeaders(),
     body: JSON.stringify({ listing_id: listingId, tone }),
@@ -525,7 +576,7 @@ export interface BattleSummary {
 }
 
 export async function getBattleSummary(userId = "me"): Promise<BattleSummary> {
-  const res = await fetch(buildUrl("/activity/summary", { user_id: userId }), {
+  const res = await apiFetch(buildUrl("/activity/summary", { user_id: userId }), {
     headers: crmHeaders(),
     cache: "no-store",
   });
@@ -541,7 +592,7 @@ export async function bumpActivity(body: {
   appointments?: number;
   purchases?: number;
 }): Promise<void> {
-  await fetch(buildUrl("/activity/bump"), {
+  await apiFetch(buildUrl("/activity/bump"), {
     method: "POST",
     headers: crmHeaders(),
     body: JSON.stringify(body),
@@ -558,7 +609,7 @@ export interface SendSmsResult {
 }
 
 export async function sendSms(leadId: number, body: string, to?: string): Promise<SendSmsResult> {
-  const res = await fetch(buildUrl("/messages/send"), {
+  const res = await apiFetch(buildUrl("/messages/send"), {
     method: "POST",
     headers: crmHeaders(),
     body: JSON.stringify({ lead_id: leadId, body, to_number: to ?? null }),
@@ -573,7 +624,7 @@ export async function addInteraction(
   body: string,
   direction?: string,
 ): Promise<Interaction> {
-  const res = await fetch(buildUrl(`/leads/${leadId}/interactions`), {
+  const res = await apiFetch(buildUrl(`/leads/${leadId}/interactions`), {
     method: "POST",
     headers: crmHeaders(),
     body: JSON.stringify({ kind, body, direction: direction ?? null }),

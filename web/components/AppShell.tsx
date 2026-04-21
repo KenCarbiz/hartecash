@@ -1,5 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { logoutAction } from "@/app/(auth)/actions";
+import type { CurrentUser } from "@/lib/api";
 
 interface NavItem {
   href: string;
@@ -52,7 +54,7 @@ const NAV: NavItem[] = [
   },
 ];
 
-function Sidebar() {
+function Sidebar({ user }: { user: CurrentUser | null }) {
   return (
     <aside className="hidden md:flex h-screen w-60 flex-col border-r border-ink-200 bg-ink-900 text-ink-100 sticky top-0">
       <div className="flex h-14 items-center gap-2 px-5 border-b border-ink-800">
@@ -84,15 +86,42 @@ function Sidebar() {
       </nav>
 
       <div className="border-t border-ink-800 px-3 py-3 text-xs">
-        <div className="flex items-center gap-2">
-          <div className="h-7 w-7 flex items-center justify-center rounded-full bg-ink-700 text-ink-200 text-xs font-medium">
-            D
+        {user ? (
+          <div className="flex items-center gap-2">
+            <div className="h-7 w-7 flex items-center justify-center rounded-full bg-ink-700 text-ink-200 text-xs font-medium">
+              {(user.name?.[0] ?? user.email[0]).toUpperCase()}
+            </div>
+            <div className="flex flex-col leading-tight flex-1 min-w-0">
+              <span className="text-ink-100 truncate">
+                {user.name ?? user.email}
+              </span>
+              <span className="text-ink-500 text-[10px] truncate">
+                {user.dealer_id} · {user.role}
+              </span>
+            </div>
+            <form action={logoutAction}>
+              <button
+                type="submit"
+                className="text-ink-400 hover:text-ink-100 text-[10px]"
+                title="Sign out"
+              >
+                ⎋
+              </button>
+            </form>
           </div>
-          <div className="flex flex-col leading-tight">
-            <span className="text-ink-100">Demo Dealer</span>
-            <span className="text-ink-500 text-[10px]">demo-dealer</span>
+        ) : (
+          <div className="flex items-center gap-2">
+            <div className="h-7 w-7 flex items-center justify-center rounded-full bg-ink-700 text-ink-200 text-xs">
+              ?
+            </div>
+            <div className="flex flex-col leading-tight">
+              <span className="text-ink-100">Not signed in</span>
+              <Link href="/login" className="text-ink-400 text-[10px] hover:text-ink-200">
+                Sign in
+              </Link>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </aside>
   );
@@ -115,10 +144,16 @@ function MobileTopbar() {
   );
 }
 
-export function AppShell({ children }: { children: ReactNode }) {
+export function AppShell({
+  children,
+  user,
+}: {
+  children: ReactNode;
+  user?: CurrentUser | null;
+}) {
   return (
     <div className="flex min-h-screen">
-      <Sidebar />
+      <Sidebar user={user ?? null} />
       <div className="flex-1 min-w-0">
         <MobileTopbar />
         <div className="mx-auto max-w-7xl px-5 sm:px-8 py-6">{children}</div>
