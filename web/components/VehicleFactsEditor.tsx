@@ -25,6 +25,7 @@ export function VehicleFactsEditor({
     license_plate_state?: string | null;
     color?: string | null;
     vin?: string | null;
+    drivable?: boolean | null;
   };
 }) {
   const [open, setOpen] = useState(false);
@@ -34,6 +35,9 @@ export function VehicleFactsEditor({
   const [state, setState] = useState(initial.license_plate_state ?? "");
   const [color, setColor] = useState(initial.color ?? "");
   const [vin, setVin] = useState(initial.vin ?? "");
+  const [drivable, setDrivable] = useState<"yes" | "no" | "unknown">(
+    initial.drivable === true ? "yes" : initial.drivable === false ? "no" : "unknown",
+  );
   const router = useRouter();
 
   const submit = (fd: FormData) => {
@@ -55,7 +59,7 @@ export function VehicleFactsEditor({
         onClick={() => setOpen(true)}
         className="text-xs text-brand-600 hover:text-brand-700 font-medium"
       >
-        Edit plate / color / VIN
+        Edit plate / color / VIN / drivable
       </button>
     );
   }
@@ -120,6 +124,24 @@ export function VehicleFactsEditor({
             className="input mt-1 font-mono"
           />
         </label>
+      </div>
+
+      <div>
+        <span className="label">Drivable</span>
+        <div className="mt-1 flex items-center gap-3 text-xs">
+          {(["yes", "no", "unknown"] as const).map((v) => (
+            <label key={v} className="inline-flex items-center gap-1">
+              <input
+                type="radio"
+                name="drivable"
+                value={v}
+                checked={drivable === v}
+                onChange={() => setDrivable(v)}
+              />
+              <span className="capitalize">{v}</span>
+            </label>
+          ))}
+        </div>
       </div>
 
       {error && (

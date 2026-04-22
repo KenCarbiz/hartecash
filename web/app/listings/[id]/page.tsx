@@ -32,7 +32,10 @@ const CLASS_BADGE: Record<string, string> = {
   unclassified: "bg-ink-100 text-ink-600",
 };
 
-function Field({
+/** Single row in the vertical vehicle fact stack: fixed-width label on the
+ *  left, value on the right. Monospace values (VIN) get a smaller font
+ *  so the full string fits without wrapping. */
+function FactRow({
   label,
   value,
   mono = false,
@@ -42,13 +45,17 @@ function Field({
   mono?: boolean;
 }) {
   return (
-    <div>
-      <p className="label">{label}</p>
-      <p
-        className={`mt-1 text-sm tabular ${mono ? "font-mono text-xs" : ""}`}
+    <div className="flex items-baseline gap-4 py-2">
+      <dt className="w-28 shrink-0 text-xs uppercase tracking-wide text-ink-500">
+        {label}
+      </dt>
+      <dd
+        className={`text-sm tabular text-ink-900 ${
+          mono ? "font-mono text-xs" : ""
+        }`}
       >
         {value ?? "—"}
-      </p>
+      </dd>
     </div>
   );
 }
@@ -179,15 +186,31 @@ export default async function ListingDetailPage({
               </span>
             </div>
 
-            <div className="mt-5 grid grid-cols-2 md:grid-cols-4 gap-4 pt-5 border-t border-ink-200">
-              <Field label="VIN" value={listing.vin ?? "—"} mono />
-              <Field
-                label="License plate"
+            {/* Vehicle box — vertical top-to-bottom stack in the exact order
+                dealers read a buyer's guide: YEAR, MAKE/MODEL, VIN, PLATE,
+                MILES, COLOR, DRIVABLE. Keeps scan-time short when flipping
+                between listings. */}
+            <dl className="mt-5 divide-y divide-ink-100 border-t border-ink-200 pt-2">
+              <FactRow
+                label="Year"
+                value={listing.year ?? "—"}
+              />
+              <FactRow
+                label="Make / Model"
+                value={
+                  [listing.make, listing.model, listing.trim]
+                    .filter(Boolean)
+                    .join(" ") || "—"
+                }
+              />
+              <FactRow label="VIN" value={listing.vin ?? "—"} mono />
+              <FactRow
+                label="Plate"
                 value={
                   listing.license_plate ? (
                     <span className="font-mono">
                       {listing.license_plate_state && (
-                        <span className="text-[10px] uppercase tracking-wider text-ink-500 mr-1">
+                        <span className="mr-1 text-[10px] uppercase tracking-wider text-ink-500">
                           {listing.license_plate_state}
                         </span>
                       )}
@@ -198,22 +221,19 @@ export default async function ListingDetailPage({
                   )
                 }
               />
-              <Field label="Color" value={listing.color ?? "—"} />
-              <Field label="Mileage" value={formatMileage(listing.mileage)} />
-              <Field label="Year" value={listing.year ?? "—"} />
-              <Field label="Make" value={listing.make ?? "—"} />
-              <Field label="Model" value={listing.model ?? "—"} />
-              <Field label="Trim" value={listing.trim ?? "—"} />
-              <Field label="Source" value={listing.source} />
-              <Field
-                label="First seen"
-                value={formatRelativeDate(listing.first_seen_at)}
+              <FactRow label="Miles" value={formatMileage(listing.mileage)} />
+              <FactRow label="Color" value={listing.color ?? "—"} />
+              <FactRow
+                label="Drivable"
+                value={
+                  listing.drivable === true
+                    ? "Yes"
+                    : listing.drivable === false
+                    ? "No"
+                    : "—"
+                }
               />
-              <Field
-                label="Last updated"
-                value={formatRelativeDate(listing.last_seen_at)}
-              />
-            </div>
+            </dl>
 
             <div className="mt-4 border-t border-ink-200 pt-4">
               <VehicleFactsEditor
@@ -223,8 +243,15 @@ export default async function ListingDetailPage({
                   license_plate_state: listing.license_plate_state,
                   color: listing.color,
                   vin: listing.vin,
+                  drivable: listing.drivable,
                 }}
               />
+            </div>
+
+            <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-ink-500">
+              <span>Source: {listing.source}</span>
+              <span>First seen {formatRelativeDate(listing.first_seen_at)}</span>
+              <span>Updated {formatRelativeDate(listing.last_seen_at)}</span>
             </div>
           </div>
 

@@ -3,6 +3,7 @@ from enum import StrEnum
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     DateTime,
     Float,
     Index,
@@ -86,6 +87,8 @@ class Listing(Base):
     license_plate: Mapped[str | None] = mapped_column(String(16), index=True)
     license_plate_state: Mapped[str | None] = mapped_column(String(4))
     color: Mapped[str | None] = mapped_column(String(32))
+    # True = runs/drives, False = won't run (parts/project car), None = unknown.
+    drivable: Mapped[bool | None] = mapped_column(Boolean)
 
     city: Mapped[str | None] = mapped_column(String(128))
     state: Mapped[str | None] = mapped_column(String(8))

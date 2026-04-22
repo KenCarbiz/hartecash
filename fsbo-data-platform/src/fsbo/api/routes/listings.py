@@ -23,6 +23,7 @@ class ListingFactsPatch(BaseModel):
     license_plate_state: str | None = Field(None, max_length=4)
     color: str | None = Field(None, max_length=32)
     vin: str | None = Field(None, max_length=17)
+    drivable: bool | None = None
 
 
 @router.get("", response_model=ListingsPage)
@@ -185,6 +186,8 @@ def patch_listing_facts(
         row.color = color or None
     if vin is not None:
         row.vin = vin or None
+    if "drivable" in payload.model_fields_set:
+        row.drivable = payload.drivable
 
     db.flush()
     return ListingOut.model_validate(row)

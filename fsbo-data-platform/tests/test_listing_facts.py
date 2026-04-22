@@ -119,3 +119,52 @@ def test_listing_exposes_new_fields(client, db_session):
     assert body["license_plate"] == "7GTF123"
     assert body["license_plate_state"] == "CA"
     assert body["color"] == "Midnight Blue"
+
+
+def test_patch_sets_drivable_true_and_false(client, db_session):
+    listing = _seed(db_session)
+    r = client.patch(
+        f"/listings/{listing.id}/facts",
+        json={"drivable": True},
+        headers={"X-Dealer-Id": "dealer-1"},
+    )
+    assert r.status_code == 200
+    assert r.json()["drivable"] is True
+
+    r = client.patch(
+        f"/listings/{listing.id}/facts",
+        json={"drivable": False},
+        headers={"X-Dealer-Id": "dealer-1"},
+    )
+    assert r.json()["drivable"] is False
+
+
+def test_patch_drivable_null_clears(client, db_session):
+    listing = _seed(db_session)
+    client.patch(
+        f"/listings/{listing.id}/facts",
+        json={"drivable": True},
+        headers={"X-Dealer-Id": "dealer-1"},
+    )
+    r = client.patch(
+        f"/listings/{listing.id}/facts",
+        json={"drivable": None},
+        headers={"X-Dealer-Id": "dealer-1"},
+    )
+    assert r.json()["drivable"] is None
+
+
+def test_patch_omitted_drivable_preserved(client, db_session):
+    listing = _seed(db_session)
+    client.patch(
+        f"/listings/{listing.id}/facts",
+        json={"drivable": True},
+        headers={"X-Dealer-Id": "dealer-1"},
+    )
+    # Patch something else without touching drivable — it should stick.
+    r = client.patch(
+        f"/listings/{listing.id}/facts",
+        json={"color": "Red"},
+        headers={"X-Dealer-Id": "dealer-1"},
+    )
+    assert r.json()["drivable"] is True

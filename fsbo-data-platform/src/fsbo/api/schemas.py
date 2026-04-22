@@ -24,6 +24,7 @@ class ListingOut(BaseModel):
     license_plate: str | None = None
     license_plate_state: str | None = None
     color: str | None = None
+    drivable: bool | None = None
 
     city: str | None
     state: str | None

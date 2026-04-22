@@ -23,6 +23,14 @@ export async function patchFactsAction(
     }
   }
 
+  // Drivable is a tri-state radio: "yes" / "no" / "unknown". Only send
+  // the field when an explicit choice was made (form always includes it
+  // here, but we tolerate its absence).
+  const driv = formData.get("drivable");
+  if (driv === "yes") patch.drivable = true;
+  else if (driv === "no") patch.drivable = false;
+  else if (driv === "unknown") patch.drivable = null;
+
   try {
     await patchListingFacts(id, patch);
     revalidatePath(`/listings/${id}`);

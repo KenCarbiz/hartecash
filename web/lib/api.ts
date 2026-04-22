@@ -25,6 +25,7 @@ export interface Listing {
   license_plate?: string | null;
   license_plate_state?: string | null;
   color?: string | null;
+  drivable?: boolean | null;
   city: string | null;
   state: string | null;
   zip_code: string | null;
@@ -159,6 +160,7 @@ export interface ListingFactsPatch {
   license_plate_state?: string | null;
   color?: string | null;
   vin?: string | null;
+  drivable?: boolean | null;
 }
 
 export async function patchListingFacts(
