@@ -1,15 +1,28 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from fsbo.api.schemas import ListingOut, ListingsPage
+from fsbo.auth.resolver import DealerId
 from fsbo.db import get_session
 from fsbo.enrichment.geocode import GeoPoint, geocode, haversine_miles
 from fsbo.models import Classification, Listing
 
 router = APIRouter(prefix="/listings", tags=["listings"])
+
+
+class ListingFactsPatch(BaseModel):
+    """Dealer-entered vehicle facts the scraper can't reliably get (plate,
+    color). All fields optional — send only what you're updating. Empty
+    string clears the field."""
+
+    license_plate: str | None = Field(None, max_length=16)
+    license_plate_state: str | None = Field(None, max_length=4)
+    color: str | None = Field(None, max_length=32)
+    vin: str | None = Field(None, max_length=17)
 
 
 @router.get("", response_model=ListingsPage)
@@ -130,4 +143,48 @@ def get_listing(
     row = db.get(Listing, listing_id)
     if not row:
         raise HTTPException(status_code=404, detail="listing not found")
+    return ListingOut.model_validate(row)
+
+
+@router.patch("/{listing_id}/facts", response_model=ListingOut)
+def patch_listing_facts(
+    listing_id: int,
+    payload: ListingFactsPatch,
+    dealer_id: DealerId,  # require auth; fact edits are rate-limitable later
+    db: Annotated[Session, Depends(get_session)],
+) -> ListingOut:
+    """Manual vehicle-fact entry.
+
+    Scrapers rarely surface license plates (state + number) or exterior
+    color — dealers capture these by asking the seller or reading them
+    off a photo. This endpoint lets authenticated users fill them in.
+    """
+    _ = dealer_id  # any authenticated user at any dealer can enrich a listing
+    row = db.get(Listing, listing_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="listing not found")
+
+    def _clean(v: str | None, upper: bool = False) -> str | None:
+        if v is None:
+            return None  # field omitted — leave existing value alone
+        stripped = v.strip()
+        if not stripped:
+            return ""  # empty string = clear the field
+        return stripped.upper() if upper else stripped
+
+    plate = _clean(payload.license_plate, upper=True)
+    state = _clean(payload.license_plate_state, upper=True)
+    color = _clean(payload.color)
+    vin = _clean(payload.vin, upper=True)
+
+    if plate is not None:
+        row.license_plate = plate or None
+    if state is not None:
+        row.license_plate_state = state or None
+    if color is not None:
+        row.color = color or None
+    if vin is not None:
+        row.vin = vin or None
+
+    db.flush()
     return ListingOut.model_validate(row)

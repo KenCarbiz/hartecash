@@ -22,6 +22,9 @@ export interface Listing {
   mileage: number | null;
   price: number | null;
   vin: string | null;
+  license_plate?: string | null;
+  license_plate_state?: string | null;
+  color?: string | null;
   city: string | null;
   state: string | null;
   zip_code: string | null;
@@ -149,6 +152,26 @@ export async function getListing(id: number): Promise<Listing | null> {
     if (err instanceof FsboApiError && err.status === 404) return null;
     throw err;
   }
+}
+
+export interface ListingFactsPatch {
+  license_plate?: string | null;
+  license_plate_state?: string | null;
+  color?: string | null;
+  vin?: string | null;
+}
+
+export async function patchListingFacts(
+  id: number,
+  patch: ListingFactsPatch,
+): Promise<Listing> {
+  const res = await apiFetch(`/listings/${id}/facts`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok)
+    throw new FsboApiError(`FSBO API ${res.status}`, res.status, await res.text());
+  return (await res.json()) as Listing;
 }
 
 export function formatPrice(value: number | null): string {

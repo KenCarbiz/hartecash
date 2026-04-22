@@ -80,6 +80,12 @@ class Listing(Base):
     mileage: Mapped[int | None] = mapped_column(Integer)
     price: Mapped[float | None] = mapped_column(Float)
     vin: Mapped[str | None] = mapped_column(String(17), index=True)
+    # License plate (captured via extension OCR or dealer manual entry).
+    # Index supports cross-listing dedup lookups when two listings share
+    # a plate — a common curbstoner tell.
+    license_plate: Mapped[str | None] = mapped_column(String(16), index=True)
+    license_plate_state: Mapped[str | None] = mapped_column(String(4))
+    color: Mapped[str | None] = mapped_column(String(32))
 
     city: Mapped[str | None] = mapped_column(String(128))
     state: Mapped[str | None] = mapped_column(String(8))

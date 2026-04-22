@@ -5,6 +5,7 @@ import { ComposePanel } from "@/components/ComposePanel";
 import { LeadPanel } from "@/components/LeadPanel";
 import { ListingTimeline } from "@/components/ListingTimeline";
 import { MarketBadge } from "@/components/MarketBadge";
+import { PlateChip, VehicleFactsEditor } from "@/components/VehicleFactsEditor";
 import { QualityPanel } from "@/components/QualityPanel";
 import { VehicleFilePanel } from "@/components/VehicleFilePanel";
 import {
@@ -31,11 +32,23 @@ const CLASS_BADGE: Record<string, string> = {
   unclassified: "bg-ink-100 text-ink-600",
 };
 
-function Field({ label, value }: { label: string; value: React.ReactNode }) {
+function Field({
+  label,
+  value,
+  mono = false,
+}: {
+  label: string;
+  value: React.ReactNode;
+  mono?: boolean;
+}) {
   return (
     <div>
       <p className="label">{label}</p>
-      <p className="mt-1 text-sm tabular">{value ?? "—"}</p>
+      <p
+        className={`mt-1 text-sm tabular ${mono ? "font-mono text-xs" : ""}`}
+      >
+        {value ?? "—"}
+      </p>
     </div>
   );
 }
@@ -99,6 +112,40 @@ export default async function ListingDetailPage({
         }
       />
 
+      {/* Identity chips sit at the top-left, directly under the title.
+          Order: VIN → LICENSE PLATE → COLOR. Any chip whose field is
+          empty quietly disappears. */}
+      {(listing.vin || listing.license_plate || listing.color) && (
+        <div className="-mt-3 mb-5 flex flex-wrap items-center gap-2">
+          {listing.vin && (
+            <span
+              className="inline-flex items-center gap-1 rounded-md bg-ink-100 px-2 py-1 font-mono text-xs text-ink-800"
+              title="VIN"
+            >
+              <span className="text-[9px] uppercase tracking-wider text-ink-500">
+                VIN
+              </span>
+              {listing.vin}
+            </span>
+          )}
+          <PlateChip
+            plate={listing.license_plate}
+            state={listing.license_plate_state}
+          />
+          {listing.color && (
+            <span
+              className="inline-flex items-center gap-1 rounded-md bg-ink-100 px-2 py-1 text-xs text-ink-800"
+              title="Color"
+            >
+              <span className="text-[9px] uppercase tracking-wider text-ink-500">
+                Color
+              </span>
+              {listing.color}
+            </span>
+          )}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-5">
           {listing.images.length > 0 && (
@@ -133,7 +180,26 @@ export default async function ListingDetailPage({
             </div>
 
             <div className="mt-5 grid grid-cols-2 md:grid-cols-4 gap-4 pt-5 border-t border-ink-200">
-              <Field label="VIN" value={listing.vin ?? "—"} />
+              <Field label="VIN" value={listing.vin ?? "—"} mono />
+              <Field
+                label="License plate"
+                value={
+                  listing.license_plate ? (
+                    <span className="font-mono">
+                      {listing.license_plate_state && (
+                        <span className="text-[10px] uppercase tracking-wider text-ink-500 mr-1">
+                          {listing.license_plate_state}
+                        </span>
+                      )}
+                      {listing.license_plate}
+                    </span>
+                  ) : (
+                    "—"
+                  )
+                }
+              />
+              <Field label="Color" value={listing.color ?? "—"} />
+              <Field label="Mileage" value={formatMileage(listing.mileage)} />
               <Field label="Year" value={listing.year ?? "—"} />
               <Field label="Make" value={listing.make ?? "—"} />
               <Field label="Model" value={listing.model ?? "—"} />
@@ -146,6 +212,18 @@ export default async function ListingDetailPage({
               <Field
                 label="Last updated"
                 value={formatRelativeDate(listing.last_seen_at)}
+              />
+            </div>
+
+            <div className="mt-4 border-t border-ink-200 pt-4">
+              <VehicleFactsEditor
+                listingId={listing.id}
+                initial={{
+                  license_plate: listing.license_plate,
+                  license_plate_state: listing.license_plate_state,
+                  color: listing.color,
+                  vin: listing.vin,
+                }}
               />
             </div>
           </div>

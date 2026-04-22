@@ -21,6 +21,9 @@ class ListingOut(BaseModel):
     mileage: int | None
     price: float | None
     vin: str | None
+    license_plate: str | None = None
+    license_plate_state: str | None = None
+    color: str | None = None
 
     city: str | None
     state: str | None

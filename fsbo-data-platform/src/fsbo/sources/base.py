@@ -23,6 +23,9 @@ class NormalizedListing:
     mileage: int | None = None
     price: float | None = None
     vin: str | None = None
+    license_plate: str | None = None
+    license_plate_state: str | None = None
+    color: str | None = None
 
     city: str | None = None
     state: str | None = None
