@@ -35,6 +35,8 @@ async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!resp.ok) {
     throw new Error(`${path} -> HTTP ${resp.status}`);
   }
+  // 204 = no body. Returning undefined as T is fine for fire-and-forget callers.
+  if (resp.status === 204) return undefined as unknown as T;
   return (await resp.json()) as T;
 }
 
@@ -78,6 +80,22 @@ async function handle(msg: WorkerMessage): Promise<WorkerResponse> {
           body: JSON.stringify({ listing_id: msg.listingId }),
         });
         return { ok: true, data };
+      }
+      case "telemetry": {
+        // Fire-and-forget; we don't want telemetry failures to spam the
+        // user's console or block the content script. 204 = no body.
+        const manifest = chrome.runtime.getManifest();
+        await apiFetch("/telemetry/extension-breakage", {
+          method: "POST",
+          body: JSON.stringify({
+            kind: msg.event,
+            url: msg.url,
+            user_agent: navigator.userAgent,
+            extension_version: manifest.version,
+            extra: msg.extra,
+          }),
+        }).catch(() => undefined);
+        return { ok: true };
       }
     }
   } catch (err) {

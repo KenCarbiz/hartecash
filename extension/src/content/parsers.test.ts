@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   extractCityState,
+  extractMakeModel,
   extractMileage,
   extractPrice,
   extractYear,
@@ -85,6 +86,41 @@ describe("extractCityState", () => {
   });
 });
 
+describe("extractMakeModel", () => {
+  it("parses Toyota RAV4 from a typical title", () => {
+    expect(extractMakeModel("2019 Toyota RAV4 XLE Premium")).toEqual({
+      make: "Toyota",
+      model: "RAV4",
+    });
+  });
+  it("normalizes Chevy to Chevrolet", () => {
+    expect(extractMakeModel("2015 Chevy Silverado 1500 LT")).toEqual({
+      make: "Chevrolet",
+      model: "Silverado",
+    });
+  });
+  it("normalizes Mercedes to Mercedes-Benz", () => {
+    expect(extractMakeModel("Mercedes C300 Sport")).toEqual({
+      make: "Mercedes-Benz",
+      model: "C300",
+    });
+  });
+  it("handles two-word makes (Land Rover)", () => {
+    expect(extractMakeModel("2018 Land Rover Discovery HSE")).toEqual({
+      make: "Land Rover",
+      model: "Discovery",
+    });
+  });
+  it("returns make alone when model is filler", () => {
+    expect(extractMakeModel("Ford for sale clean title")).toEqual({
+      make: "Ford",
+    });
+  });
+  it("returns empty when no make matches", () => {
+    expect(extractMakeModel("clean low-mile car")).toEqual({});
+  });
+});
+
 describe("upgradeImageUrl", () => {
   it("rewrites _s -> _n", () => {
     expect(upgradeImageUrl("https://scontent.fb/abc_s.jpg")).toBe(
@@ -134,6 +170,8 @@ describe("graphRecordToIngest", () => {
       url: "https://www.facebook.com/marketplace/item/1234567890",
       title: "2018 Ford F-150 XLT",
       year: 2018,
+      make: "Ford",
+      model: "F-150",
       price: 22500,
       mileage: 85000,
       city: "Tampa",

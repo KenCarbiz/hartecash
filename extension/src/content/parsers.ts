@@ -31,6 +31,85 @@ export function extractYear(text: string | null | undefined): number | undefined
   return m ? Number(m[1]) : undefined;
 }
 
+// Common US-market makes the FB Marketplace title regex needs to recognize.
+// Listed in order of likelihood of false-positive prefix match — longer
+// brands first so "Land Rover" beats "Land". Aliases handle "Mercedes" vs
+// "Mercedes-Benz" and "VW" vs "Volkswagen".
+const MAKE_ALIASES: Array<[RegExp, string]> = [
+  [/\b(land[- ]rover)\b/i, "Land Rover"],
+  [/\b(alfa[- ]romeo)\b/i, "Alfa Romeo"],
+  [/\b(aston[- ]martin)\b/i, "Aston Martin"],
+  [/\b(rolls[- ]royce)\b/i, "Rolls-Royce"],
+  [/\b(mercedes(?:[- ]benz)?)\b/i, "Mercedes-Benz"],
+  [/\b(vw|volkswagen)\b/i, "Volkswagen"],
+  [/\b(chevy|chevrolet)\b/i, "Chevrolet"],
+  [/\b(audi)\b/i, "Audi"],
+  [/\b(acura)\b/i, "Acura"],
+  [/\b(bmw)\b/i, "BMW"],
+  [/\b(buick)\b/i, "Buick"],
+  [/\b(cadillac)\b/i, "Cadillac"],
+  [/\b(chrysler)\b/i, "Chrysler"],
+  [/\b(dodge)\b/i, "Dodge"],
+  [/\b(fiat)\b/i, "Fiat"],
+  [/\b(ford)\b/i, "Ford"],
+  [/\b(genesis)\b/i, "Genesis"],
+  [/\b(gmc)\b/i, "GMC"],
+  [/\b(honda)\b/i, "Honda"],
+  [/\b(hyundai)\b/i, "Hyundai"],
+  [/\b(infiniti)\b/i, "Infiniti"],
+  [/\b(jaguar)\b/i, "Jaguar"],
+  [/\b(jeep)\b/i, "Jeep"],
+  [/\b(kia)\b/i, "Kia"],
+  [/\b(lexus)\b/i, "Lexus"],
+  [/\b(lincoln)\b/i, "Lincoln"],
+  [/\b(maserati)\b/i, "Maserati"],
+  [/\b(mazda)\b/i, "Mazda"],
+  [/\b(mini)\b/i, "MINI"],
+  [/\b(mitsubishi)\b/i, "Mitsubishi"],
+  [/\b(nissan)\b/i, "Nissan"],
+  [/\b(porsche)\b/i, "Porsche"],
+  [/\b(ram)\b/i, "Ram"],
+  [/\b(subaru)\b/i, "Subaru"],
+  [/\b(tesla)\b/i, "Tesla"],
+  [/\b(toyota)\b/i, "Toyota"],
+  [/\b(volvo)\b/i, "Volvo"],
+];
+
+/** Pull make + model from a FB Marketplace title like "2019 Toyota RAV4 XLE Premium".
+ *
+ * Returns whatever it can find — make alone, both, or neither. Year is
+ * stripped before model extraction so "2019 Toyota RAV4" -> model "RAV4".
+ * Trim words after the model are NOT included; that's a separate problem
+ * that needs a known-trim lookup per make/model.
+ */
+export function extractMakeModel(
+  text: string | null | undefined,
+): { make?: string; model?: string } {
+  if (!text) return {};
+  for (const [re, canonical] of MAKE_ALIASES) {
+    const m = text.match(re);
+    if (!m) continue;
+    const make = canonical;
+    // Take the next 1-2 word tokens after the make as the model. Stop at
+    // punctuation, low-info filler ("for sale", "clean title"), or numbers
+    // that look like prices/mileage.
+    const after = text.slice(m.index! + m[0].length).trimStart();
+    const modelMatch = after.match(/^([A-Za-z0-9][\w-]{0,15})/);
+    const model = modelMatch ? cleanModel(modelMatch[1]) : undefined;
+    return { make, model: model || undefined };
+  }
+  return {};
+}
+
+function cleanModel(raw: string): string | undefined {
+  const stop = new Set([
+    "for", "sale", "clean", "title", "low", "miles", "mi", "owner",
+    "one", "1", "auto", "manual", "needs", "work", "runs", "drives",
+  ]);
+  if (stop.has(raw.toLowerCase())) return undefined;
+  return raw;
+}
+
 export function extractPrice(text: string | null | undefined): number | undefined {
   if (!text) return undefined;
   const m = text.match(PRICE_RE);
@@ -237,6 +316,8 @@ export function graphRecordToIngest(
       "",
   ).trim();
 
+  const { make, model } = extractMakeModel(title);
+
   return {
     source: "facebook_marketplace",
     external_id: id,
@@ -244,6 +325,8 @@ export function graphRecordToIngest(
     title,
     description: description || undefined,
     year: extractYear(title),
+    make,
+    model,
     price,
     mileage,
     city: geo?.city,

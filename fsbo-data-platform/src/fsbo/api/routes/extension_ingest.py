@@ -33,7 +33,7 @@ from fsbo.enrichment.seller_graph import (
     register_listing_identities,
 )
 from fsbo.enrichment.vin import decode_vin
-from fsbo.models import Classification, Listing, PriceHistory
+from fsbo.models import Classification, Listing, PriceHistory, ScrapeRun
 from fsbo.sources.base import NormalizedListing
 from fsbo.valuation.market import estimate as estimate_market
 
@@ -569,6 +569,50 @@ def duplicates_of(
         )
         for r in rows
     ]
+
+
+# -- Telemetry --------------------------------------------------------------
+
+
+class BreakageReport(BaseModel):
+    """Extension-side observability: fired when the FB Marketplace
+    walker returns 0 listings on a URL where it should have found
+    something (feed page, search results, or detail page). FB ships
+    GraphQL shape changes silently; this is how we find out.
+    """
+
+    kind: str  # "graphql_walker_empty" | "dom_walker_empty" | "content_script_error"
+    url: str
+    user_agent: str | None = None
+    extension_version: str | None = None
+    extra: dict | None = None  # tile count, error message, etc.
+
+
+@router.post("/telemetry/extension-breakage", status_code=204)
+def report_breakage(
+    payload: BreakageReport,
+    dealer_id: DealerId,
+    db: Annotated[Session, Depends(get_session)],
+) -> None:
+    """Record an extension breakage event as a failed ScrapeRun so it
+    surfaces in the source-health dashboard alongside other source
+    failures. Cap message length so we don't blow up the column.
+    """
+    extra = dict(payload.extra or {})
+    extra["dealer_id"] = dealer_id
+    if payload.user_agent:
+        extra["user_agent"] = payload.user_agent[:200]
+    if payload.extension_version:
+        extra["extension_version"] = payload.extension_version[:32]
+
+    db.add(
+        ScrapeRun(
+            source="facebook_marketplace",
+            params={"telemetry": payload.kind, "url": payload.url[:500], **extra},
+            error=f"extension breakage: {payload.kind}",
+            finished_at=datetime.now(timezone.utc),
+        )
+    )
 
 
 def _to_normalized(payload: ExtensionListing) -> NormalizedListing:

@@ -83,6 +83,12 @@ PROTECTED_ENDPOINTS: list[tuple[str, str, dict | None]] = [
         {"listings": []},
     ),
     ("GET", "/sources/extension/lookup?url=https://example.com/x", None),
+    # Telemetry (extension breakage reports)
+    (
+        "POST",
+        "/telemetry/extension-breakage",
+        {"kind": "graphql_walker_empty", "url": "https://fb.com/marketplace"},
+    ),
     # Admin
     ("POST", "/admin/rescore", None),
 ]

@@ -365,7 +365,33 @@ async function route(): Promise<void> {
     await runDetail();
   } else if (isFeedPage()) {
     installFeedObserver();
+    scheduleBreakageCheck();
   }
+}
+
+/** When we land on a feed page but harvest 0 listings within the timeout
+ *  window, FB has probably changed their GraphQL shape or DOM structure.
+ *  Fire telemetry once per route so we find out before dealers do. */
+let breakageReported = false;
+function scheduleBreakageCheck(): void {
+  breakageReported = false;
+  const url = location.href;
+  setTimeout(() => {
+    if (breakageReported) return;
+    if (sessionCount > 0) return;
+    // Confirm there are tiles on the page — if FB just hasn't rendered
+    // yet, skip the report.
+    const tileCount = document.querySelectorAll(
+      'a[href*="/marketplace/item/"]',
+    ).length;
+    breakageReported = true;
+    void callWorker({
+      kind: "telemetry",
+      event: tileCount > 0 ? "graphql_walker_empty" : "dom_walker_empty",
+      url,
+      extra: { tile_count_seen: tileCount, session_count: sessionCount },
+    });
+  }, 8000);
 }
 
 let lastPath = location.pathname;

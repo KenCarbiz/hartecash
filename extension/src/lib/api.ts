@@ -55,7 +55,16 @@ export type WorkerMessage =
   | { kind: "ingest"; listing: IngestListing }
   | { kind: "ingestBatch"; listings: IngestListing[] }
   | { kind: "lookupByUrl"; url: string }
-  | { kind: "claimLead"; listingId: number };
+  | { kind: "claimLead"; listingId: number }
+  | {
+      kind: "telemetry";
+      event:
+        | "graphql_walker_empty"
+        | "dom_walker_empty"
+        | "content_script_error";
+      url: string;
+      extra?: Record<string, unknown>;
+    };
 
 export interface WorkerResponse<T = unknown> {
   ok: boolean;
