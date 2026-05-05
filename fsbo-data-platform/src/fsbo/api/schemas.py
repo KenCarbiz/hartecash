@@ -31,6 +31,8 @@ class ListingOut(BaseModel):
     zip_code: str | None
 
     seller_phone: str | None
+    seller_profile_url: str | None = None
+    seller_joined_year: int | None = None
 
     classification: str
     classification_confidence: float | None

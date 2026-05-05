@@ -23,6 +23,8 @@ export interface IngestListing {
   zip_code?: string;
   seller_name?: string;
   seller_phone?: string;
+  seller_profile_url?: string;
+  seller_joined_year?: number;
   images?: string[];
   posted_at?: string;
 }

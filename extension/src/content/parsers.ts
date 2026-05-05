@@ -196,7 +196,20 @@ interface MarketplaceListingRecord {
   redacted_description_for_seo?: unknown;
   creation_time?: unknown;
   odometer_data?: unknown;
+  // Seller fields. FB uses several names depending on which GraphQL
+  // edge produced the record — `marketplace_listing_seller` on detail
+  // pages, `story_actors`/`actors` on feed stories.
+  marketplace_listing_seller?: unknown;
+  seller?: unknown;
+  story_actors?: unknown;
+  actors?: unknown;
   [key: string]: unknown;
+}
+
+interface SellerInfo {
+  name?: string;
+  profile_url?: string;
+  joined_year?: number;
 }
 
 function numericId(rec: MarketplaceListingRecord): string | null {
@@ -289,6 +302,50 @@ function titleFromRecord(rec: MarketplaceListingRecord): string {
   ).trim();
 }
 
+interface SellerCandidate {
+  id?: string | number;
+  name?: string;
+  url?: string;
+  profile_url?: string;
+  joined_year?: number;
+  joined_time?: number;
+}
+
+function sellerFromRecord(rec: MarketplaceListingRecord): SellerInfo {
+  // FB ships seller under any of: marketplace_listing_seller, seller,
+  // first element of story_actors/actors (for feed records).
+  const candidates: unknown[] = [
+    rec.marketplace_listing_seller,
+    rec.seller,
+  ];
+  for (const arrKey of ["story_actors", "actors"] as const) {
+    const arr = rec[arrKey];
+    if (Array.isArray(arr) && arr.length > 0) candidates.push(arr[0]);
+  }
+  for (const cand of candidates) {
+    if (!cand || typeof cand !== "object") continue;
+    const c = cand as SellerCandidate;
+    if (!c.name && !c.url && !c.profile_url && !c.id) continue;
+    const profileUrl =
+      c.profile_url ||
+      c.url ||
+      (c.id ? `https://www.facebook.com/${c.id}` : undefined);
+    let joined_year: number | undefined;
+    if (typeof c.joined_year === "number") {
+      joined_year = c.joined_year;
+    } else if (typeof c.joined_time === "number") {
+      const ms = c.joined_time > 10_000_000_000 ? c.joined_time : c.joined_time * 1000;
+      joined_year = new Date(ms).getUTCFullYear();
+    }
+    return {
+      name: typeof c.name === "string" ? c.name.trim() || undefined : undefined,
+      profile_url: profileUrl,
+      joined_year,
+    };
+  }
+  return {};
+}
+
 
 /** Convert a Facebook Marketplace listing JSON record to an ingest payload. */
 export function graphRecordToIngest(
@@ -317,6 +374,7 @@ export function graphRecordToIngest(
   ).trim();
 
   const { make, model } = extractMakeModel(title);
+  const seller = sellerFromRecord(rec);
 
   return {
     source: "facebook_marketplace",
@@ -333,6 +391,9 @@ export function graphRecordToIngest(
     state: geo?.state,
     images,
     posted_at,
+    seller_name: seller.name,
+    seller_profile_url: seller.profile_url,
+    seller_joined_year: seller.joined_year,
   };
 }
 

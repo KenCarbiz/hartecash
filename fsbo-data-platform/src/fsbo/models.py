@@ -102,6 +102,11 @@ class Listing(Base):
 
     seller_name: Mapped[str | None] = mapped_column(String(256))
     seller_phone: Mapped[str | None] = mapped_column(String(32), index=True)
+    # Marketplace-specific seller signals. profile_url + joined_year are
+    # FB-Marketplace specifics that feed the curbstoner scorer; both are
+    # optional and may be null for non-FB sources.
+    seller_profile_url: Mapped[str | None] = mapped_column(Text)
+    seller_joined_year: Mapped[int | None] = mapped_column(Integer)
 
     classification: Mapped[str] = mapped_column(
         String(32), default=Classification.UNCLASSIFIED.value, nullable=False

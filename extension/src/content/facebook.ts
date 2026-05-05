@@ -400,7 +400,59 @@ async function route(): Promise<void> {
   } else if (isFeedPage()) {
     installFeedObserver();
     scheduleBreakageCheck();
+    void maybeStartAutoScroll();
   }
+}
+
+/** Opt-in auto-scroll: when the dealer enabled it in the popup, slowly
+ *  scroll the marketplace feed so more tiles enter the harvester's
+ *  view. Stops on tab blur, on URL change, when bottom is reached,
+ *  or after 8 minutes (safety cap). Jittered 4-9s between scrolls. */
+let autoScrollAbort: (() => void) | null = null;
+async function maybeStartAutoScroll(): Promise<void> {
+  if (autoScrollAbort) {
+    autoScrollAbort();
+    autoScrollAbort = null;
+  }
+  const { autoScroll } = (await chrome.storage.local.get({ autoScroll: false })) as {
+    autoScroll: boolean;
+  };
+  if (!autoScroll) return;
+
+  let stopped = false;
+  let timer: number | null = null;
+  const startedAt = Date.now();
+  const MAX_RUN_MS = 8 * 60 * 1000;
+  const startedPath = location.pathname;
+
+  const stop = () => {
+    if (stopped) return;
+    stopped = true;
+    if (timer) window.clearTimeout(timer);
+    document.removeEventListener("visibilitychange", onVis);
+  };
+  const onVis = () => {
+    if (document.hidden) stop();
+  };
+  document.addEventListener("visibilitychange", onVis);
+
+  const tick = () => {
+    if (stopped) return;
+    if (location.pathname !== startedPath) return stop();
+    if (Date.now() - startedAt > MAX_RUN_MS) return stop();
+    const remaining =
+      document.documentElement.scrollHeight -
+      window.scrollY -
+      window.innerHeight;
+    if (remaining < 80) return stop(); // hit bottom
+    const step = 600 + Math.floor(Math.random() * 400); // 600-1000 px
+    window.scrollBy({ top: step, behavior: "smooth" });
+    const wait = 4000 + Math.floor(Math.random() * 5000); // 4-9 s
+    timer = window.setTimeout(tick, wait);
+  };
+  // Initial delay so we don't scroll mid-page-render.
+  timer = window.setTimeout(tick, 2500);
+  autoScrollAbort = stop;
 }
 
 /** When we land on a feed page but harvest 0 listings within the timeout
@@ -435,6 +487,10 @@ setInterval(() => {
     seenThisSession.clear();
     sessionCount = 0;
     chrome.storage.session?.set?.({ session_count: 0 });
+    if (autoScrollAbort) {
+      autoScrollAbort();
+      autoScrollAbort = null;
+    }
     void route();
   }
 }, 1200);

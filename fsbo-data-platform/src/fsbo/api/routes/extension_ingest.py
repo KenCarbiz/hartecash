@@ -60,6 +60,10 @@ class ExtensionListing(BaseModel):
     zip_code: str | None = None
     seller_name: str | None = None
     seller_phone: str | None = None
+    # Optional FB-specific seller signals — fed into the curbstoner /
+    # dealer-likelihood scorer downstream.
+    seller_profile_url: str | None = None
+    seller_joined_year: int | None = None
     images: list[str] = []
     posted_at: datetime | None = None
 
@@ -185,6 +189,11 @@ async def ingest(
                 setattr(existing, attr, getattr(norm, attr))
         if not existing.images and norm.images:
             existing.images = norm.images
+        # Backfill seller signals if the prior visit didn't have them.
+        if payload.listing.seller_profile_url and not existing.seller_profile_url:
+            existing.seller_profile_url = payload.listing.seller_profile_url
+        if payload.listing.seller_joined_year and not existing.seller_joined_year:
+            existing.seller_joined_year = payload.listing.seller_joined_year
         # If we got new images, schedule mirror catch-up.
         if norm.images:
             background.add_task(_schedule_mirror, existing.id, list(norm.images))
@@ -208,6 +217,8 @@ async def ingest(
         zip_code=norm.zip_code,
         seller_name=norm.seller_name,
         seller_phone=norm.seller_phone,
+        seller_profile_url=payload.listing.seller_profile_url,
+        seller_joined_year=payload.listing.seller_joined_year,
         images=norm.images,
         posted_at=norm.posted_at,
         raw={"source": "extension", "attributes": attrs.as_dict()},

@@ -214,6 +214,50 @@ describe("graphRecordToIngest", () => {
   });
 });
 
+describe("graphRecordToIngest seller info", () => {
+  it("extracts seller from marketplace_listing_seller", () => {
+    const ingest = graphRecordToIngest({
+      id: "1234567890",
+      marketplace_listing_title: "2018 Ford F-150 XLT",
+      listing_price: { amount: "22500" },
+      marketplace_listing_seller: {
+        id: "100012345678",
+        name: "Jane Doe",
+        url: "https://www.facebook.com/jane.doe",
+        joined_time: 1_577_836_800, // 2020-01-01 UTC
+      },
+    });
+    expect(ingest?.seller_name).toBe("Jane Doe");
+    expect(ingest?.seller_profile_url).toBe(
+      "https://www.facebook.com/jane.doe",
+    );
+    expect(ingest?.seller_joined_year).toBe(2020);
+  });
+
+  it("falls back to story_actors[0] for feed records", () => {
+    const ingest = graphRecordToIngest({
+      id: "9999999999",
+      marketplace_listing_title: "2015 Civic",
+      listing_price: { amount: "9500" },
+      story_actors: [
+        { id: "abc123", name: "Bob Smith" },
+      ],
+    });
+    expect(ingest?.seller_name).toBe("Bob Smith");
+    expect(ingest?.seller_profile_url).toBe("https://www.facebook.com/abc123");
+  });
+
+  it("returns no seller when nothing matches", () => {
+    const ingest = graphRecordToIngest({
+      id: "1010101010",
+      marketplace_listing_title: "2016 Tundra",
+      listing_price: { amount: "18000" },
+    });
+    expect(ingest?.seller_name).toBeUndefined();
+    expect(ingest?.seller_profile_url).toBeUndefined();
+  });
+});
+
 describe("walkForListingRecords", () => {
   it("finds a nested listing inside a GraphQL payload", () => {
     const payload = {
