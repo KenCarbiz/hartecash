@@ -63,15 +63,32 @@ function queueIngest(listing: IngestListing): void {
   pendingBatch.push(listing);
   bumpCounter();
   if (batchTimer !== null) return;
+  // Jittered debounce: random 1.0-2.5s window. Looks more human and
+  // avoids consistent timing fingerprints if FB ever bothers profiling us.
+  const delay = 1000 + Math.floor(Math.random() * 1500);
   batchTimer = window.setTimeout(() => {
     batchTimer = null;
     flushBatch();
-  }, 1500);
+  }, delay);
   if (pendingBatch.length >= 40) {
     if (batchTimer) window.clearTimeout(batchTimer);
     batchTimer = null;
     flushBatch();
   }
+}
+
+/** Refuse to do anything when FB has presented a security challenge.
+ *  Posting telemetry here would just compound the problem. */
+function isCheckpointed(): boolean {
+  if (location.pathname.startsWith("/checkpoint/")) return true;
+  if (location.pathname.startsWith("/login")) return true;
+  // FB sometimes flashes "Help us confirm it's you" inline on a Marketplace
+  // route without changing the URL. Cheap DOM check for the title text.
+  const t = document.title.toLowerCase();
+  if (t.includes("security check") || t.includes("confirm it's you")) {
+    return true;
+  }
+  return false;
 }
 
 // --------------------------------------------------------------------------
@@ -286,7 +303,20 @@ function listenForGraphQL(): void {
   });
 }
 
+// Marker substrings that have to appear in a GraphQL response body for
+// us to bother walking it. Skipping non-marketplace payloads (Messenger
+// chat, news feed, notifications) cuts CPU and avoids accidentally
+// matching unrelated id/title/price triples in chat data.
+const MARKETPLACE_MARKERS = [
+  "marketplace_listing_id",
+  "marketplace_listing_title",
+  "marketplace_feed_stories",
+  "MarketplaceListing",
+];
+
 function parseGraphQLPayload(body: string): void {
+  // Cheap pre-filter — skip Messenger / News Feed / Notifications GraphQL.
+  if (!MARKETPLACE_MARKERS.some((m) => body.includes(m))) return;
   // FB's GraphQL responses are multi-JSON-line or single JSON. Parse each
   // chunk and walk the payload for Marketplace product-ish shapes.
   const lines = body.split("\n").filter(Boolean);
@@ -357,6 +387,10 @@ function installFeedObserver(): void {
 // --------------------------------------------------------------------------
 
 async function route(): Promise<void> {
+  if (isCheckpointed()) {
+    // FB has thrown up a verification wall; back off completely.
+    return;
+  }
   // GraphQL hook runs on ANY Marketplace page — FB's SPA may load feed
   // data even when the URL currently shows a detail page.
   installGraphQLHook();
