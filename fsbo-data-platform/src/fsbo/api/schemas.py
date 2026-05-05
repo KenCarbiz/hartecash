@@ -45,6 +45,8 @@ class ListingOut(BaseModel):
     auto_hidden: bool = False
     auto_hide_reason: str | None = None
 
+    condition: dict = {}
+
     images: list[str]
     posted_at: datetime | None
     first_seen_at: datetime

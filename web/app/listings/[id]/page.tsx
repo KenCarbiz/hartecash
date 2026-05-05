@@ -5,6 +5,7 @@ import { ComposePanel } from "@/components/ComposePanel";
 import { LeadPanel } from "@/components/LeadPanel";
 import { ListingTimeline } from "@/components/ListingTimeline";
 import { MarketBadge } from "@/components/MarketBadge";
+import { ConditionPanel } from "@/components/ConditionPanel";
 import { PlateChip, VehicleFactsEditor } from "@/components/VehicleFactsEditor";
 import { QualityPanel } from "@/components/QualityPanel";
 import { VehicleFilePanel } from "@/components/VehicleFilePanel";
@@ -291,6 +292,7 @@ export default async function ListingDetailPage({
 
         <div className="lg:col-span-1 space-y-3">
           <QualityPanel listing={listing} />
+          <ConditionPanel condition={listing.condition} />
           <MarketBadge estimate={market} />
           <ListingTimeline stats={stats} />
           <h2 className="text-sm font-semibold text-ink-700 pt-1">Lead workspace</h2>

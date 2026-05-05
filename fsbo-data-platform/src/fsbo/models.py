@@ -93,6 +93,11 @@ class Listing(Base):
     # mirrored from sources whose URLs expire (FB CDN). Served via the
     # /listings/{id}/image/{idx} proxy. Empty list = nothing mirrored.
     mirrored_images: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    # Vision-derived condition assessment from Claude Haiku 4.5. Schema
+    # in fsbo.enrichment.condition_vision.ConditionAssessment. Empty
+    # dict means "not yet assessed" (assessment may run async after
+    # ingest).
+    condition: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
 
     city: Mapped[str | None] = mapped_column(String(128))
     state: Mapped[str | None] = mapped_column(String(8))

@@ -8,6 +8,21 @@ export type Classification =
   | "scam"
   | "uncertain";
 
+export type ConditionRating = "excellent" | "good" | "fair" | "poor" | "unknown";
+export type DamageLevel = "none" | "cosmetic" | "moderate" | "heavy" | "unknown";
+
+export interface ConditionAssessment {
+  overall?: ConditionRating;
+  body_damage?: DamageLevel;
+  paint?: ConditionRating;
+  interior?: ConditionRating;
+  tires?: ConditionRating;
+  notes?: string;
+  flags?: string[];
+  checked_images?: number;
+  source_image?: string | null;
+}
+
 export interface Listing {
   id: number;
   source: string;
@@ -39,6 +54,7 @@ export interface Listing {
   quality_breakdown?: Record<string, number>;
   auto_hidden?: boolean;
   auto_hide_reason?: string | null;
+  condition?: ConditionAssessment;
   images: string[];
   posted_at: string | null;
   first_seen_at: string;

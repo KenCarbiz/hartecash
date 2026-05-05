@@ -21,6 +21,8 @@ from sqlalchemy.orm import Session
 from fsbo.auth.resolver import DealerId
 from fsbo.db import get_session
 from fsbo.db import SessionLocal
+from fsbo.enrichment.condition_vision import assess_condition
+from fsbo.enrichment.plate_vision import extract_plate_from_images
 from fsbo.media import mirror as media_mirror
 from fsbo.enrichment.attributes import extract as extract_attrs
 from fsbo.enrichment.authenticity import score_authenticity
@@ -135,6 +137,47 @@ def _schedule_mirror(listing_id: int, image_urls: list[str]) -> None:
         existing = list(row.mirrored_images or [])
         merged = existing + [k for k in keys if k not in existing]
         row.mirrored_images = merged
+        db.commit()
+    finally:
+        db.close()
+
+
+async def _schedule_vision(listing_id: int, image_urls: list[str]) -> None:
+    """Run vision assessments on a listing's photos. Skipped silently
+    when no Anthropic key is configured (dev / CI). Three calls run
+    sequentially to keep the API rate honest:
+      - plate OCR (only if plate not already set)
+      - condition assessment (always — fresh per listing)
+    VIN OCR is left to the existing vin_vision worker on the scheduler;
+    we don't want to duplicate that here.
+    """
+    if not image_urls:
+        return
+    db = SessionLocal()
+    try:
+        row = db.get(Listing, listing_id)
+        if row is None:
+            return
+
+        # Plate OCR — only if dealer/scraper hasn't already set one.
+        if not row.license_plate:
+            try:
+                plate_res = await extract_plate_from_images(image_urls)
+                if plate_res.plate:
+                    row.license_plate = plate_res.plate
+                    if plate_res.state and not row.license_plate_state:
+                        row.license_plate_state = plate_res.state
+            except Exception:  # noqa: BLE001 — vision is best-effort
+                pass
+
+        # Condition assessment — always re-run (cheap; future photos
+        # may show damage the first photo missed).
+        try:
+            cond = await assess_condition(image_urls)
+            row.condition = cond.as_dict()
+        except Exception:  # noqa: BLE001
+            pass
+
         db.commit()
     finally:
         db.close()
@@ -285,6 +328,7 @@ async def ingest(
     # Mirror FB CDN photos in the background (URLs expire ~24h).
     if norm.images:
         background.add_task(_schedule_mirror, row.id, list(norm.images))
+        background.add_task(_schedule_vision, row.id, list(norm.images))
 
     return IngestOut(listing_id=row.id, duplicate=False)
 
