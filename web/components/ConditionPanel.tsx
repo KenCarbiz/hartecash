@@ -1,3 +1,8 @@
+"use client";
+
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+
 import type { ConditionAssessment, ConditionRating, DamageLevel } from "@/lib/api";
 
 const RATING_COLOR: Record<ConditionRating, string> = {
@@ -17,15 +22,27 @@ const DAMAGE_COLOR: Record<DamageLevel, string> = {
 };
 
 export function ConditionPanel({ condition }: { condition?: ConditionAssessment }) {
-  if (!condition || !condition.checked_images) {
+  const router = useRouter();
+  const pending = !condition || !condition.checked_images;
+
+  useEffect(() => {
+    if (!pending) return;
+    // Poll the page every 8s — server-component data refetches and the
+    // panel re-renders with the assessment once vision finishes. Stops
+    // automatically when checked_images > 0.
+    const id = setInterval(() => router.refresh(), 8000);
+    return () => clearInterval(id);
+  }, [pending, router]);
+
+  if (pending) {
     return (
       <div className="panel">
         <div className="panel-header">
           <h3 className="text-sm font-semibold">AI condition</h3>
         </div>
         <p className="px-5 py-4 text-xs text-ink-500">
-          Vision assessment runs in the background after photos are mirrored.
-          Refresh in a few seconds.
+          <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500 mr-1.5 align-middle" />
+          Claude vision running on photos…
         </p>
       </div>
     );
