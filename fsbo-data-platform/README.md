@@ -3,7 +3,7 @@
 Private-party (FSBO) vehicle listing aggregation platform. Collects, cleans, dedups,
 and serves listings from public marketplaces via a REST API.
 
-Designed to be consumed by dealer-facing products (e.g. AutoCurb) as a separate
+Designed to be consumed by dealer-facing products (e.g. AutoAcquisition) as a separate
 service. Will be extracted into its own repo once API contracts stabilize
 (~month 3-4).
 
@@ -52,7 +52,7 @@ python -m fsbo.workers.scheduler
 GET    /listings?zip=33607&make=ford&year_min=2018&classification=private_seller
 GET    /listings/{id}
 
-# Webhooks (for AutoCurb / other consumers)
+# Webhooks (for AutoAcquisition / other consumers)
 POST   /webhooks/subscriptions          # create, returns secret once
 GET    /webhooks/subscriptions
 DELETE /webhooks/subscriptions/{id}

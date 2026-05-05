@@ -93,7 +93,7 @@ export function VehicleFilePanel({
                     href={`/listings/${src.id}`}
                     className="text-ink-900 hover:text-brand-600"
                   >
-                    Open in AutoCurb
+                    Open in AutoAcquisition
                   </Link>
                 )}
                 {isPrimary && (

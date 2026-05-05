@@ -2,7 +2,7 @@
   "name": "autocurb-web",
   "version": "0.0.1",
   "private": true,
-  "description": "AutoCurb dashboard — consumes fsbo-data-platform",
+  "description": "AutoAcquisition dashboard — consumes fsbo-data-platform",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

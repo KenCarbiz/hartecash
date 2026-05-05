@@ -1,7 +1,7 @@
 """Dealer resolution for every request.
 
 Priority:
-  1. Session cookie (autocurb_session JWT) — normal dashboard flow
+  1. Session cookie (autoacquisition_session JWT) — normal dashboard flow
   2. Bearer token / X-Api-Key — Chrome extension + integrations
   3. X-Dealer-Id header — DEV ONLY, for tests and local development
 

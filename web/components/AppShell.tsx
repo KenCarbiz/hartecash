@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { logoutAction } from "@/app/(auth)/actions";
+import { AppSwitcher } from "@/components/AppSwitcher";
 import type { CurrentUser } from "@/lib/api";
 
 interface NavItem {
@@ -62,12 +63,13 @@ const NAV: NavItem[] = [
 function Sidebar({ user }: { user: CurrentUser | null }) {
   return (
     <aside className="hidden md:flex h-screen w-60 flex-col border-r border-ink-200 bg-ink-900 text-ink-100 sticky top-0">
-      <div className="flex h-14 items-center gap-2 px-5 border-b border-ink-800">
+      <div className="flex h-14 items-center gap-2 px-3 border-b border-ink-800">
+        <AppSwitcher variant="sidebar" />
         <span className="flex h-7 w-7 items-center justify-center rounded bg-brand-600 text-white text-sm font-bold">
           A
         </span>
         <div className="flex flex-col leading-tight">
-          <span className="text-sm font-semibold">AutoCurb</span>
+          <span className="text-sm font-semibold">AutoAcquisition</span>
           <span className="text-[10px] uppercase tracking-wider text-ink-400">
             Acquisitions
           </span>
@@ -134,13 +136,16 @@ function Sidebar({ user }: { user: CurrentUser | null }) {
 
 function MobileTopbar() {
   return (
-    <header className="md:hidden sticky top-0 z-10 flex h-12 items-center justify-between border-b border-ink-200 bg-white px-4">
-      <Link href="/" className="flex items-center gap-2 font-semibold">
-        <span className="flex h-6 w-6 items-center justify-center rounded bg-brand-600 text-white text-xs font-bold">
-          A
-        </span>
-        AutoCurb
-      </Link>
+    <header className="md:hidden sticky top-0 z-10 flex h-12 items-center justify-between border-b border-ink-200 bg-white px-3">
+      <div className="flex items-center gap-2">
+        <AppSwitcher variant="topbar" />
+        <Link href="/" className="flex items-center gap-2 font-semibold">
+          <span className="flex h-6 w-6 items-center justify-center rounded bg-brand-600 text-white text-xs font-bold">
+            A
+          </span>
+          AutoAcquisition
+        </Link>
+      </div>
       <nav className="flex items-center gap-3 text-sm text-ink-600">
         <Link href="/listings">Listings</Link>
         <Link href="/leads">Leads</Link>

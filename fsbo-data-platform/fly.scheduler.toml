@@ -1,4 +1,4 @@
-# fly.toml for the AutoCurb scheduler (workers) service.
+# fly.toml for the AutoAcquisition scheduler (workers) service.
 #
 # MUST be exactly ONE instance — the token-bucket rate limiter and the
 # webhook drain leader are in-process. Running multiple would double-poll.

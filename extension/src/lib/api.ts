@@ -1,5 +1,5 @@
 /**
- * Thin client for the AutoCurb API, used by content scripts + background.
+ * Thin client for the AutoAcquisition API, used by content scripts + background.
  *
  * All extension requests go through the service worker (background) because
  * MV3 content scripts have stricter CORS/cookie constraints. We post messages

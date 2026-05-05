@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 const BASE_URL = process.env.FSBO_API_URL ?? "http://localhost:8000";
-const SESSION_COOKIE = "autocurb_session";
+const SESSION_COOKIE = "autoacquisition_session";
 
 interface Result {
   ok: boolean;

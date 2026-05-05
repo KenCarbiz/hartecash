@@ -45,7 +45,7 @@ export function ApiKeysPanel({ keys }: { keys: ApiKeyRow[] }) {
         <div>
           <h2 className="text-sm font-semibold">API keys</h2>
           <p className="text-[11px] text-ink-500 mt-0.5">
-            For the AutoCurb Chrome extension and programmatic integrations.
+            For the AutoAcquisition Chrome extension and programmatic integrations.
             Tokens are shown once at creation — save them in a password manager.
           </p>
         </div>

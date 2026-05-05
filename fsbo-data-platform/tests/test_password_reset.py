@@ -82,7 +82,7 @@ def test_reset_with_valid_token_succeeds(_reset_setup, client, db_session):
     body = r.json()
     assert body["email"] == "reset-me@example.com"
     # Session cookie was set
-    assert "autocurb_session" in r.cookies
+    assert "autoacquisition_session" in r.cookies
 
     # Old password no longer works
     login_old = client.post(

@@ -84,8 +84,8 @@ async function sessionCookie(): Promise<string | undefined> {
   try {
     const { cookies } = await import("next/headers");
     const store = await cookies();
-    const c = store.get("autocurb_session");
-    return c ? `autocurb_session=${c.value}` : undefined;
+    const c = store.get("autoacquisition_session");
+    return c ? `autoacquisition_session=${c.value}` : undefined;
   } catch {
     return undefined;
   }

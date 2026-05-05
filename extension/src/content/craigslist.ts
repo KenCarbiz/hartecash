@@ -9,29 +9,29 @@
 import { callWorker } from "../lib/api";
 
 function renderOverlay(listingId: number | null, duplicate: boolean) {
-  const existing = document.getElementById("autocurb-overlay");
+  const existing = document.getElementById("autoacquisition-overlay");
   if (existing) existing.remove();
 
   const host = document.createElement("div");
-  host.id = "autocurb-overlay";
-  host.className = "autocurb-overlay";
+  host.id = "autoacquisition-overlay";
+  host.className = "autoacquisition-overlay";
   host.innerHTML = `
-    <div class="autocurb-card">
-      <div class="autocurb-header">
-        <span class="autocurb-logo">A</span>
-        <span>AutoCurb</span>
+    <div class="autoacquisition-card">
+      <div class="autoacquisition-header">
+        <span class="autoacquisition-logo">A</span>
+        <span>AutoAcquisition</span>
       </div>
-      <div class="autocurb-body">
+      <div class="autoacquisition-body">
         ${
           duplicate
-            ? `<p class="autocurb-dup">Already in your feed · #${listingId}</p>`
-            : '<p class="autocurb-status">Not yet indexed — your next poll will pick it up</p>'
+            ? `<p class="autoacquisition-dup">Already in your feed · #${listingId}</p>`
+            : '<p class="autoacquisition-status">Not yet indexed — your next poll will pick it up</p>'
         }
         ${
           listingId
-            ? `<div class="autocurb-actions">
-                 <button data-action="claim" class="autocurb-btn autocurb-btn-primary">Claim as lead</button>
-                 <button data-action="open" class="autocurb-btn autocurb-btn-secondary">Open in AutoCurb</button>
+            ? `<div class="autoacquisition-actions">
+                 <button data-action="claim" class="autoacquisition-btn autoacquisition-btn-primary">Claim as lead</button>
+                 <button data-action="open" class="autoacquisition-btn autoacquisition-btn-secondary">Open in AutoAcquisition</button>
                </div>`
             : ""
         }
@@ -44,7 +44,7 @@ function renderOverlay(listingId: number | null, duplicate: boolean) {
     async () => {
       if (!listingId) return;
       const resp = await callWorker({ kind: "claimLead", listingId });
-      if (resp.ok) host.querySelector(".autocurb-status, .autocurb-dup")!.textContent =
+      if (resp.ok) host.querySelector(".autoacquisition-status, .autoacquisition-dup")!.textContent =
         "✓ Lead claimed";
     },
   );

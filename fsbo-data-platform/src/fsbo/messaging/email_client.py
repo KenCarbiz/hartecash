@@ -43,7 +43,7 @@ async def send_email(
         return EmailResult(backend="none", sent=False, error="invalid recipient")
 
     backend = (settings.email_backend or "console").lower()
-    sender = (from_address or settings.email_from or "noreply@autocurb.local").strip()
+    sender = (from_address or settings.email_from or "noreply@autoacquisition.io").strip()
 
     if backend == "sendgrid":
         return await _send_via_sendgrid(to, sender, subject, text_body, html_body)
@@ -81,7 +81,7 @@ async def _send_via_sendgrid(
         )
     payload: dict = {
         "personalizations": [{"to": [{"email": to}]}],
-        "from": {"email": sender, "name": settings.email_from_name or "AutoCurb"},
+        "from": {"email": sender, "name": settings.email_from_name or "AutoAcquisition"},
         "subject": subject,
         "content": [{"type": "text/plain", "value": text}],
     }

@@ -1,7 +1,7 @@
 """JWT issuance + verification for session cookies.
 
 Cookie flow:
-  POST /auth/login -> issue HS256 JWT, set Set-Cookie: autocurb_session=<jwt>
+  POST /auth/login -> issue HS256 JWT, set Set-Cookie: autoacquisition_session=<jwt>
   Every request      -> middleware reads cookie, verifies, sets request.state
   POST /auth/logout  -> clear cookie
 
@@ -21,7 +21,7 @@ import jwt
 
 from fsbo.config import settings
 
-SESSION_COOKIE_NAME = "autocurb_session"
+SESSION_COOKIE_NAME = "autoacquisition_session"
 
 
 def issue(user_id: int, dealer_id: str, email: str) -> str:

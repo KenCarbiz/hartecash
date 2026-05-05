@@ -132,7 +132,7 @@ def _render_email(user: User, listing: Listing) -> tuple[str, str, str]:
         f"{_format_price(listing.price)} · {loc}\n"
         f"Mileage: {listing.mileage:,} mi\n" if listing.mileage else ""
     )
-    text += f"\nOpen the lead in AutoCurb:\n{url}\n"
+    text += f"\nOpen the lead in AutoAcquisition:\n{url}\n"
 
     html = f"""
       <p>Hi{(' ' + user.name) if user.name else ''},</p>

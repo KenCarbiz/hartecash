@@ -39,14 +39,14 @@ class Settings(BaseSettings):
     cookie_secure: bool = False  # set True in production (HTTPS only)
 
     # Public origin used to build reset/invite URLs in outbound email.
-    # Example: https://app.autocurb.com. If blank, emails show raw paths.
+    # Example: https://app.autoacquisition.io. If blank, emails show raw paths.
     app_origin: str = ""
 
     # Transactional email. Three backends: console (default dev — logs),
     # sendgrid (HTTP API), smtp (any SMTP server).
     email_backend: str = "console"
-    email_from: str = "noreply@autocurb.local"
-    email_from_name: str = "AutoCurb"
+    email_from: str = "noreply@autoacquisition.io"
+    email_from_name: str = "AutoAcquisition"
 
     sendgrid_api_key: str = ""
 

@@ -1,7 +1,7 @@
 /**
  * Facebook Marketplace content script.
  *
- * This is the single highest-value piece of AutoCurb. FB Marketplace is
+ * This is the single highest-value piece of AutoAcquisition. FB Marketplace is
  * the #1 FSBO source by ~5-10x any other single platform, so we harvest
  * aggressively as the dealer browses — but only in THEIR logged-in
  * session, only from pages they chose to view.
@@ -156,30 +156,30 @@ async function runDetail(): Promise<void> {
 }
 
 function renderOverlay(listingId: number | null, duplicate: boolean): void {
-  const existing = document.getElementById("autocurb-overlay");
+  const existing = document.getElementById("autoacquisition-overlay");
   if (existing) existing.remove();
 
   const host = document.createElement("div");
-  host.id = "autocurb-overlay";
-  host.className = "autocurb-overlay";
+  host.id = "autoacquisition-overlay";
+  host.className = "autoacquisition-overlay";
   host.innerHTML = `
-    <div class="autocurb-card">
-      <div class="autocurb-header">
-        <span class="autocurb-logo">A</span>
-        <span>AutoCurb</span>
+    <div class="autoacquisition-card">
+      <div class="autoacquisition-header">
+        <span class="autoacquisition-logo">A</span>
+        <span>AutoAcquisition</span>
       </div>
-      <div class="autocurb-body">
+      <div class="autoacquisition-body">
         ${
           duplicate
-            ? `<p class="autocurb-dup">Already in your feed · #${listingId ?? "?"}</p>`
-            : '<p class="autocurb-status">Indexed in your feed</p>'
+            ? `<p class="autoacquisition-dup">Already in your feed · #${listingId ?? "?"}</p>`
+            : '<p class="autoacquisition-status">Indexed in your feed</p>'
         }
-        <div class="autocurb-actions">
-          <button data-action="claim" class="autocurb-btn autocurb-btn-primary">
+        <div class="autoacquisition-actions">
+          <button data-action="claim" class="autoacquisition-btn autoacquisition-btn-primary">
             Claim as lead
           </button>
-          <button data-action="open" class="autocurb-btn autocurb-btn-secondary">
-            Open in AutoCurb
+          <button data-action="open" class="autoacquisition-btn autoacquisition-btn-secondary">
+            Open in AutoAcquisition
           </button>
         </div>
       </div>
@@ -192,7 +192,7 @@ function renderOverlay(listingId: number | null, duplicate: boolean): void {
       if (!listingId) return;
       const resp = await callWorker({ kind: "claimLead", listingId });
       if (resp.ok) {
-        host.querySelector(".autocurb-status, .autocurb-dup")!.textContent =
+        host.querySelector(".autoacquisition-status, .autoacquisition-dup")!.textContent =
           "✓ Lead claimed";
       }
     });
@@ -224,11 +224,11 @@ function isFeedPage(): boolean {
  * an isolated world and can't patch the page's window, so we inject a
  * <script> into the DOM. */
 function installGraphQLHook(): void {
-  if (document.getElementById("autocurb-gql-hook")) return;
+  if (document.getElementById("autoacquisition-gql-hook")) return;
   const code = `(() => {
-    if (window.__autocurbHooked) return;
-    window.__autocurbHooked = true;
-    const MARKER = '__autocurb_gql';
+    if (window.__autoacquisitionHooked) return;
+    window.__autoacquisitionHooked = true;
+    const MARKER = '__autoacquisition_gql';
     const post = (txt) => {
       try {
         window.postMessage({ [MARKER]: true, body: String(txt).slice(0, 800000) }, '*');
@@ -255,12 +255,12 @@ function installGraphQLHook(): void {
     const origOpen = XMLHttpRequest.prototype.open;
     const origSend = XMLHttpRequest.prototype.send;
     XMLHttpRequest.prototype.open = function(method, url) {
-      this.__autocurb_url = url;
+      this.__autoacquisition_url = url;
       return origOpen.apply(this, arguments);
     };
     XMLHttpRequest.prototype.send = function() {
       try {
-        if (isGql(this.__autocurb_url)) {
+        if (isGql(this.__autoacquisition_url)) {
           this.addEventListener('load', () => {
             try { post(this.responseText); } catch (_e) {}
           });
@@ -270,7 +270,7 @@ function installGraphQLHook(): void {
     };
   })();`;
   const s = document.createElement("script");
-  s.id = "autocurb-gql-hook";
+  s.id = "autoacquisition-gql-hook";
   s.textContent = code;
   (document.head || document.documentElement).appendChild(s);
   s.remove();
@@ -280,8 +280,8 @@ function installGraphQLHook(): void {
 function listenForGraphQL(): void {
   window.addEventListener("message", (event) => {
     if (event.source !== window) return;
-    const data = event.data as { __autocurb_gql?: boolean; body?: string };
-    if (!data || !data.__autocurb_gql || !data.body) return;
+    const data = event.data as { __autoacquisition_gql?: boolean; body?: string };
+    if (!data || !data.__autoacquisition_gql || !data.body) return;
     parseGraphQLPayload(data.body);
   });
 }

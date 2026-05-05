@@ -12,10 +12,10 @@ export async function GET(req: NextRequest) {
   }
 
   const cookieStore = await cookies();
-  const session = cookieStore.get("autocurb_session");
+  const session = cookieStore.get("autoacquisition_session");
   const headers: Record<string, string> = { Accept: "text/csv" };
   if (session) {
-    headers["Cookie"] = `autocurb_session=${session.value}`;
+    headers["Cookie"] = `autoacquisition_session=${session.value}`;
   } else {
     headers["X-Dealer-Id"] = "demo-dealer";
   }

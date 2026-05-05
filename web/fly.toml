@@ -1,4 +1,4 @@
-# fly.toml for the AutoCurb dealer dashboard (Next.js).
+# fly.toml for the AutoAcquisition dealer dashboard (Next.js).
 #
 # Deploy:
 #   fly launch --no-deploy --copy-config --dockerfile Dockerfile \

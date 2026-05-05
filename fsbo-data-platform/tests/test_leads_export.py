@@ -39,7 +39,7 @@ def test_export_csv_headers_and_content(client, db_session):
     r = client.get("/leads/export.csv", headers={"X-Dealer-Id": "demo-dealer"})
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("text/csv")
-    assert "autocurb_leads_" in r.headers["content-disposition"]
+    assert "autoacquisition_leads_" in r.headers["content-disposition"]
 
     body = r.text
     lines = body.strip().splitlines()

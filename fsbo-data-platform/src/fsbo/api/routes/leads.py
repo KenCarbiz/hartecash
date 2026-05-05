@@ -285,7 +285,7 @@ def export_leads_csv(
             buf.truncate()
 
     filename = (
-        f"autocurb_leads_{datetime.now(timezone.utc).strftime('%Y%m%d')}.csv"
+        f"autoacquisition_leads_{datetime.now(timezone.utc).strftime('%Y%m%d')}.csv"
     )
     return StreamingResponse(
         _iter(),

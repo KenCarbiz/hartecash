@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/lib/api";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "AutoCurb · Acquisitions",
+  title: "AutoAcquisition · Acquisitions",
   description: "Private-party vehicle acquisition for dealers",
 };
 

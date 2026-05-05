@@ -84,7 +84,7 @@ const KNOWN_SOURCES = [
     key: "facebook_marketplace",
     label: "Facebook Marketplace",
     status: "extension",
-    description: "Via AutoCurb Chrome extension on dealer's browser.",
+    description: "Via AutoAcquisition Chrome extension on dealer's browser.",
   },
 ];
 

@@ -1,6 +1,6 @@
 import type { Config } from "tailwindcss";
 
-// AutoCurb admin design system
+// AutoAcquisition admin design system
 // Deep navy sidebar, indigo brand accent, slate neutrals. Inspired by
 // Stripe/Linear — admin-dense, not marketing.
 const config: Config = {

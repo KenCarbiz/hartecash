@@ -209,17 +209,17 @@ async def forgot_password(
             if origin
             else f"/reset-password?token={raw_token}"
         )
-        subject = "Reset your AutoCurb password"
+        subject = "Reset your AutoAcquisition password"
         text = (
             f"Hi{(' ' + user.name) if user.name else ''},\n\n"
-            f"Use the link below to reset your AutoCurb password. It expires "
+            f"Use the link below to reset your AutoAcquisition password. It expires "
             f"in {RESET_TTL_HOURS} hour.\n\n"
             f"{reset_url}\n\n"
             f"If you didn't request this, you can ignore this email.\n"
         )
         html = (
             f"<p>Hi{(' ' + user.name) if user.name else ''},</p>"
-            f"<p>Use the button below to reset your AutoCurb password. "
+            f"<p>Use the button below to reset your AutoAcquisition password. "
             f"It expires in {RESET_TTL_HOURS} hour.</p>"
             f'<p><a href="{reset_url}" '
             f'style="display:inline-block;padding:10px 16px;'

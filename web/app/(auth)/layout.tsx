@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "../globals.css";
 
 export const metadata: Metadata = {
-  title: "AutoCurb — Sign in",
+  title: "AutoAcquisition — Sign in",
 };
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
@@ -15,7 +15,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
               <span className="flex h-8 w-8 items-center justify-center rounded bg-brand-600 text-white font-bold">
                 A
               </span>
-              <span className="text-lg font-semibold tracking-tight">AutoCurb</span>
+              <span className="text-lg font-semibold tracking-tight">AutoAcquisition</span>
             </div>
             {children}
           </div>

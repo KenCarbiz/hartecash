@@ -1,7 +1,7 @@
-# AutoCurb browser extension
+# AutoAcquisition browser extension
 
 Augments Facebook Marketplace, Craigslist, and other FSBO marketplaces with
-AutoCurb buyer tools while the dealer browses them natively.
+AutoAcquisition buyer tools while the dealer browses them natively.
 
 ## What it does
 
@@ -9,14 +9,14 @@ AutoCurb buyer tools while the dealer browses them natively.
    extracts listing metadata from the DOM as the dealer scrolls, and POSTs it
    back to `/sources/extension/ingest` so it gets classified, deduped, and
    joined into the dealer's feed.
-2. **Overlay UI**: injects a floating AutoCurb widget on each listing page with:
+2. **Overlay UI**: injects a floating AutoAcquisition widget on each listing page with:
    - "Claim as lead" one-click action
    - Prior-engagement badge ("Alice already reached out 3d ago")
    - VIN from photo (clicks the photo to OCR)
-   - "Open in AutoCurb" deep-link
+   - "Open in AutoAcquisition" deep-link
 3. **Privacy**: the extension runs in the dealer's own browser session. The
    dealer is already logged into Facebook with their personal/business
-   account. AutoCurb never stores Facebook credentials, only the public listing
+   account. AutoAcquisition never stores Facebook credentials, only the public listing
    data the dealer is entitled to view.
 
 ## Architecture

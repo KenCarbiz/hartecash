@@ -1,4 +1,4 @@
-# fly.toml for the AutoCurb API service.
+# fly.toml for the AutoAcquisition API service.
 #
 # Edit the `app` name to match your Fly org. Deploy:
 #   fly launch --no-deploy --copy-config --dockerfile Dockerfile --name autocurb-api

@@ -1,5 +1,5 @@
 /**
- * MV3 service worker. Central place that makes API calls to AutoCurb.
+ * MV3 service worker. Central place that makes API calls to AutoAcquisition.
  *
  * Content scripts post WorkerMessage via chrome.runtime.sendMessage; we
  * call the API with the saved settings (Bearer API key when present,

@@ -5,7 +5,7 @@ collector + modern-classic cars. Runs ~500 auctions per week. Each
 auction page has rich JSON-LD describing the vehicle.
 
 Different use-case from mass-market FSBO: BaT sellers are often enthusiasts
-with well-documented cars. Values skew higher. For an AutoCurb dealer
+with well-documented cars. Values skew higher. For an AutoAcquisition dealer
 doing specialty / enthusiast acquisition, this is pure signal.
 
 Listing URL pattern: bringatrailer.com/listing/<slug>/

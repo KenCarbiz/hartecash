@@ -23,7 +23,7 @@ export function middleware(request: NextRequest) {
   }
 
   // No session cookie -> redirect to login.
-  const session = request.cookies.get("autocurb_session");
+  const session = request.cookies.get("autoacquisition_session");
   if (!session) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";

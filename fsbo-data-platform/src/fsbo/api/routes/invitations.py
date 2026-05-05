@@ -26,7 +26,7 @@ from fsbo.models import Dealer, Invitation, User
 router = APIRouter(prefix="/invitations", tags=["invitations"])
 
 INVITE_DAYS = 14
-COOKIE_NAME = "autocurb_session"
+COOKIE_NAME = "autoacquisition_session"
 
 
 def _hash_token(token: str) -> str:
