@@ -89,6 +89,10 @@ class Listing(Base):
     color: Mapped[str | None] = mapped_column(String(32))
     # True = runs/drives, False = won't run (parts/project car), None = unknown.
     drivable: Mapped[bool | None] = mapped_column(Boolean)
+    # Storage keys (relative paths under FSBO_MEDIA_ROOT) for photos we
+    # mirrored from sources whose URLs expire (FB CDN). Served via the
+    # /listings/{id}/image/{idx} proxy. Empty list = nothing mirrored.
+    mirrored_images: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
 
     city: Mapped[str | None] = mapped_column(String(128))
     state: Mapped[str | None] = mapped_column(String(8))

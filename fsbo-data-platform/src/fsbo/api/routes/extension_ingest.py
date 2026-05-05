@@ -12,13 +12,16 @@
 from datetime import datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from fsbo.auth.resolver import DealerId
 from fsbo.db import get_session
+from fsbo.db import SessionLocal
+from fsbo.media import mirror as media_mirror
 from fsbo.enrichment.attributes import extract as extract_attrs
 from fsbo.enrichment.authenticity import score_authenticity
 from fsbo.enrichment.classifier import classify
@@ -109,10 +112,35 @@ class ListingStats(BaseModel):
     price_history: list[PriceHistoryRow]
 
 
+def _schedule_mirror(listing_id: int, image_urls: list[str]) -> None:
+    """Background-task body: mirror any FB-CDN URLs and store the keys
+    on the Listing row. Runs in a fresh DB session because the request
+    session is already closed by the time BackgroundTasks fires.
+    """
+    targets = [u for u in image_urls if media_mirror.must_mirror(u)]
+    if not targets:
+        return
+    keys = media_mirror.mirror_listing_images(targets)
+    if not keys:
+        return
+    db = SessionLocal()
+    try:
+        row = db.get(Listing, listing_id)
+        if row is None:
+            return
+        existing = list(row.mirrored_images or [])
+        merged = existing + [k for k in keys if k not in existing]
+        row.mirrored_images = merged
+        db.commit()
+    finally:
+        db.close()
+
+
 @router.post("/sources/extension/ingest", response_model=IngestOut)
 async def ingest(
     payload: IngestIn,
     dealer_id: DealerId,
+    background: BackgroundTasks,
     db: Annotated[Session, Depends(get_session)],
 ) -> IngestOut:
     _ = dealer_id  # auth-only; corpus is global, but we refuse anonymous writers
@@ -157,6 +185,9 @@ async def ingest(
                 setattr(existing, attr, getattr(norm, attr))
         if not existing.images and norm.images:
             existing.images = norm.images
+        # If we got new images, schedule mirror catch-up.
+        if norm.images:
+            background.add_task(_schedule_mirror, existing.id, list(norm.images))
         return IngestOut(listing_id=existing.id, duplicate=True)
 
     attrs = extract_attrs(norm)
@@ -239,6 +270,10 @@ async def ingest(
     row.quality_breakdown = q.breakdown
     row.auto_hidden = q.auto_hide
     row.auto_hide_reason = q.auto_hide_reason
+
+    # Mirror FB CDN photos in the background (URLs expire ~24h).
+    if norm.images:
+        background.add_task(_schedule_mirror, row.id, list(norm.images))
 
     return IngestOut(listing_id=row.id, duplicate=False)
 
@@ -569,6 +604,35 @@ def duplicates_of(
         )
         for r in rows
     ]
+
+
+# -- Mirrored image proxy ---------------------------------------------------
+
+
+@router.get("/listings/{listing_id}/image/{idx}")
+def serve_mirrored_image(
+    listing_id: int,
+    idx: int,
+    dealer_id: DealerId,
+    db: Annotated[Session, Depends(get_session)],
+) -> FileResponse:
+    """Serve a mirrored copy of one of this listing's photos.
+
+    The dashboard renders <img src="/listings/123/image/0"> rather than
+    pointing at FB's CDN directly — that way photos don't 404 the day
+    after the listing was first scraped.
+    """
+    _ = dealer_id
+    row = db.get(Listing, listing_id)
+    if not row:
+        raise HTTPException(404, "listing not found")
+    keys = list(row.mirrored_images or [])
+    if idx < 0 or idx >= len(keys):
+        raise HTTPException(404, "image not found")
+    path = media_mirror.local_path(keys[idx])
+    if not path.exists():
+        raise HTTPException(404, "image missing on disk")
+    return FileResponse(path, media_type="image/jpeg")
 
 
 # -- Telemetry --------------------------------------------------------------
