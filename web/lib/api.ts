@@ -322,6 +322,24 @@ export async function createApiKey(name: string): Promise<ApiKeyCreated> {
   return (await res.json()) as ApiKeyCreated;
 }
 
+// ---------- extension install code ----------
+
+export interface ExtensionInstallCode {
+  code: string;
+  expires_at: string;
+  expires_in_seconds: number;
+}
+
+/** Generate a fresh 8-char install code that the dealer pastes into
+ *  the extension popup to provision an API key without copy-pasting
+ *  the full ac_live_... secret. Single-use, 10-min TTL. */
+export async function issueExtensionInstallCode(): Promise<ExtensionInstallCode> {
+  const res = await apiFetch("/extension/install-code", { method: "POST" });
+  if (!res.ok)
+    throw new FsboApiError(`FSBO API ${res.status}`, res.status, await res.text());
+  return (await res.json()) as ExtensionInstallCode;
+}
+
 // ---------- invitations ----------
 
 export interface InvitationRow {

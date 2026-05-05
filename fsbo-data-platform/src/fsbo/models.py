@@ -354,6 +354,42 @@ class ApiKey(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class ExtensionInstallCode(Base):
+    """Short-lived single-use code that an extension exchanges for an
+    API key without ever asking the dealer to copy/paste a long token.
+
+    Flow:
+      1. Logged-in dealer hits POST /extension/install-code → server
+         generates an 8-char base32 code, stores its sha256 hash with
+         a 10-minute TTL, returns the plaintext code to the dashboard.
+      2. Extension popup shows a code input. Dealer pastes the code.
+      3. Popup POSTs to /extension/exchange-install-code (no auth);
+         server looks up the hash, marks it used, mints a fresh ApiKey
+         for that dealer, returns the token + dealer_id.
+
+    We never store the plaintext code, and the code is single-use to
+    keep the brute-force window small (still rate-limit the exchange
+    endpoint at the proxy/CDN layer).
+    """
+
+    __tablename__ = "extension_install_codes"
+    __table_args__ = (
+        Index("ix_install_codes_hash", "code_hash", unique=True),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    dealer_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    issued_by_user_id: Mapped[int | None] = mapped_column(Integer)
+    code_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class Message(Base):
     """Outbound/inbound SMS tied to a lead. Wraps Twilio's Message resource."""
 

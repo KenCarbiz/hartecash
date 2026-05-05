@@ -23,6 +23,8 @@ from fsbo.db import get_session
 from fsbo.db import SessionLocal
 from fsbo.enrichment.condition_vision import assess_condition
 from fsbo.enrichment.plate_vision import extract_plate_from_images
+from fsbo.enrichment.vin import decode_vin as nhtsa_decode_vin
+from fsbo.enrichment.vin_vision import extract_vin_from_images
 from fsbo.media import mirror as media_mirror
 from fsbo.enrichment.attributes import extract as extract_attrs
 from fsbo.enrichment.authenticity import score_authenticity
@@ -146,10 +148,11 @@ async def _schedule_vision(listing_id: int, image_urls: list[str]) -> None:
     """Run vision assessments on a listing's photos. Skipped silently
     when no Anthropic key is configured (dev / CI). Three calls run
     sequentially to keep the API rate honest:
+      - VIN OCR (only if no VIN already)
       - plate OCR (only if plate not already set)
       - condition assessment (always — fresh per listing)
-    VIN OCR is left to the existing vin_vision worker on the scheduler;
-    we don't want to duplicate that here.
+    Each is best-effort; failures are swallowed so a flaky vision call
+    can't break the ingest pipeline.
     """
     if not image_urls:
         return
@@ -159,6 +162,24 @@ async def _schedule_vision(listing_id: int, image_urls: list[str]) -> None:
         if row is None:
             return
 
+        # VIN OCR — only if scraper/dealer didn't already capture one.
+        # When we get a VIN, immediately decode it via NHTSA to fill in
+        # year/make/model/trim if those are still missing.
+        if not row.vin:
+            try:
+                vin_res = await extract_vin_from_images(image_urls)
+                if vin_res.vin:
+                    row.vin = vin_res.vin
+                    if not (row.year and row.make and row.model):
+                        decoded = await nhtsa_decode_vin(vin_res.vin)
+                        if decoded and not decoded.error_code:
+                            row.year = row.year or decoded.year
+                            row.make = row.make or decoded.make
+                            row.model = row.model or decoded.model
+                            row.trim = row.trim or decoded.trim
+            except Exception:  # noqa: BLE001 — vision is best-effort
+                pass
+
         # Plate OCR — only if dealer/scraper hasn't already set one.
         if not row.license_plate:
             try:
@@ -167,7 +188,7 @@ async def _schedule_vision(listing_id: int, image_urls: list[str]) -> None:
                     row.license_plate = plate_res.plate
                     if plate_res.state and not row.license_plate_state:
                         row.license_plate_state = plate_res.state
-            except Exception:  # noqa: BLE001 — vision is best-effort
+            except Exception:  # noqa: BLE001
                 pass
 
         # Condition assessment — always re-run (cheap; future photos

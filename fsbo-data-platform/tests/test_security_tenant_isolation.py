@@ -89,6 +89,10 @@ PROTECTED_ENDPOINTS: list[tuple[str, str, dict | None]] = [
         "/telemetry/extension-breakage",
         {"kind": "graphql_walker_empty", "url": "https://fb.com/marketplace"},
     ),
+    # Extension onboarding (issuing a code is dealer-scoped; exchange is
+    # intentionally NOT in this list — it's the unauth-by-design exchange
+    # that the extension hits during install).
+    ("POST", "/extension/install-code", None),
     # Admin
     ("POST", "/admin/rescore", None),
 ]

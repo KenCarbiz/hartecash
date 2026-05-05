@@ -8,6 +8,7 @@ from fsbo.api.routes import (
     api_keys,
     auth,
     extension_ingest,
+    extension_onboarding,
     invitations,
     leads,
     listings,
@@ -59,6 +60,7 @@ app.include_router(templates.router)
 app.include_router(ai.router)
 app.include_router(activity.router)
 app.include_router(extension_ingest.router)
+app.include_router(extension_onboarding.router)
 app.include_router(saved_searches.router)
 app.include_router(valuation.router)
 app.include_router(admin.router)

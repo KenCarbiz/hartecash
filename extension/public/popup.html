@@ -180,6 +180,46 @@
       as you browse.
     </div>
 
+    <div id="connect" class="tip" style="display: none">
+      <p style="margin: 0 0 6px; color: #1e293b; font-weight: 500">
+        Connect this extension
+      </p>
+      <p style="margin: 0 0 8px">
+        Open AutoAcquisition → Settings, click <em>Generate install code</em>,
+        and paste the 8-character code below.
+      </p>
+      <div style="display: flex; gap: 6px">
+        <input
+          id="connect-code"
+          type="text"
+          placeholder="ABCD2345"
+          maxlength="8"
+          style="
+            flex: 1;
+            text-transform: uppercase;
+            font-family: ui-monospace, monospace;
+            letter-spacing: 0.15em;
+          "
+        />
+        <button
+          id="connect-btn"
+          style="
+            padding: 6px 12px;
+            background: #4f46e5;
+            color: #fff;
+            border: 0;
+            border-radius: 6px;
+            font-weight: 500;
+            font-size: 12px;
+            cursor: pointer;
+          "
+        >
+          Connect
+        </button>
+      </div>
+      <p id="connect-msg" class="hint" style="margin-top: 8px"></p>
+    </div>
+
     <details id="settings">
       <summary>Settings</summary>
 
@@ -247,6 +287,10 @@
         totalCount: document.getElementById("total-count"),
         settings: document.getElementById("settings"),
         tip: document.getElementById("open-marketplace-tip"),
+        connect: document.getElementById("connect"),
+        connectCode: document.getElementById("connect-code"),
+        connectBtn: document.getElementById("connect-btn"),
+        connectMsg: document.getElementById("connect-msg"),
       };
 
       // -- load settings --
@@ -329,6 +373,53 @@
       } catch {
         // ignore
       }
+
+      // -- connect onboarding (only show when no API key yet) --
+      if (!stored.apiKey) {
+        els.connect.style.display = "block";
+      }
+      els.connectBtn.addEventListener("click", async () => {
+        const raw = (els.connectCode.value || "").trim().toUpperCase();
+        if (raw.length !== 8) {
+          els.connectMsg.style.color = "#b91c1c";
+          els.connectMsg.textContent = "Code must be 8 characters.";
+          return;
+        }
+        els.connectMsg.style.color = "#64748b";
+        els.connectMsg.textContent = "Connecting…";
+        const baseUrl = (els.apiUrl.value || DEFAULTS.apiUrl).replace(
+          /\/$/,
+          "",
+        );
+        try {
+          const resp = await fetch(`${baseUrl}/extension/exchange-install-code`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ code: raw }),
+          });
+          if (!resp.ok) {
+            els.connectMsg.style.color = "#b91c1c";
+            els.connectMsg.textContent =
+              resp.status === 404
+                ? "Code not recognized — check it or generate a new one."
+                : `Connect failed (HTTP ${resp.status}).`;
+            return;
+          }
+          const body = await resp.json();
+          await chrome.storage.local.set({
+            apiKey: body.api_key,
+            dealerId: body.dealer_id,
+          });
+          els.apiKey.value = body.api_key;
+          els.dealerId.value = body.dealer_id;
+          els.connect.style.display = "none";
+          els.connectMsg.textContent = "";
+          pingHealth();
+        } catch (err) {
+          els.connectMsg.style.color = "#b91c1c";
+          els.connectMsg.textContent = "Network error connecting to API.";
+        }
+      });
     </script>
   </body>
 </html>

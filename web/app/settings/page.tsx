@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import { PageHeader } from "@/components/AppShell";
 import { ApiKeysPanel } from "@/components/ApiKeysPanel";
+import { ExtensionInstallPanel } from "@/components/ExtensionInstallPanel";
 import { InvitationsPanel } from "@/components/InvitationsPanel";
 import { NotificationsPanel } from "@/components/NotificationsPanel";
 import { TemplatesPanel } from "@/components/TemplatesPanel";
@@ -77,6 +78,8 @@ export default async function SettingsPage() {
         {prefs && <NotificationsPanel prefs={prefs} />}
 
         <TemplatesPanel templates={templates} />
+
+        <ExtensionInstallPanel />
 
         <ApiKeysPanel keys={keys} />
 
