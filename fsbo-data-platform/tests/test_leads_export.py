@@ -111,6 +111,14 @@ def test_teammates_endpoint(client):
 
 
 def test_teammates_dealer_isolation(client):
+    """Spoofed X-Dealer-Id must NOT override an authenticated session.
+
+    Registering sets a session cookie for "Solo Co". Even when the
+    caller adds X-Dealer-Id: demo-dealer, the resolver's cookie path
+    wins and we see Solo Co's roster — not demo-dealer's. This proves
+    a logged-in user can't read another dealer's data by header
+    injection.
+    """
     client.post(
         "/auth/register",
         json={
@@ -123,5 +131,7 @@ def test_teammates_dealer_isolation(client):
         "/leads/teammates", headers={"X-Dealer-Id": "demo-dealer"}
     )
     assert r.status_code == 200
-    # demo-dealer has no users -> empty list
-    assert r.json() == []
+    emails = {u["email"] for u in r.json()}
+    assert emails == {"solo@example.com"}, (
+        "header injection must not override the session cookie"
+    )

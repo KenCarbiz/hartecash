@@ -2,17 +2,16 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from fsbo.ai.opener import generate_opener
+from fsbo.auth.resolver import DealerId
 from fsbo.db import get_session
 from fsbo.models import Listing
 
 router = APIRouter(prefix="/ai", tags=["ai"])
-
-DealerIdHeader = Annotated[str, Header(alias="X-Dealer-Id")]
 
 
 class OpenerIn(BaseModel):
@@ -29,7 +28,7 @@ class OpenerOut(BaseModel):
 @router.post("/opener", response_model=OpenerOut)
 def ai_opener(
     payload: OpenerIn,
-    dealer_id: DealerIdHeader,  # reserved for usage metering per dealer
+    dealer_id: DealerId,  # reserved for usage metering per dealer
     db: Annotated[Session, Depends(get_session)],
 ) -> OpenerOut:
     _ = dealer_id  # usage metering hook-in point

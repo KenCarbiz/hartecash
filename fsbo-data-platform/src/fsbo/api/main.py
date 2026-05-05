@@ -19,9 +19,33 @@ from fsbo.api.routes import (
     valuation,
     webhooks,
 )
+from fsbo.config import settings
 from fsbo.logging import configure
 
 configure()
+
+
+def _enforce_production_safety() -> None:
+    """Refuse to boot in production with insecure defaults.
+
+    The default jwt_secret + cookie_secure=False would silently let
+    anyone forge a session cookie or sniff one over HTTP. Fail loud
+    instead of letting a misconfigured deploy go live.
+    """
+    if settings.env_mode != "production":
+        return
+    if "change-me" in settings.jwt_secret or len(settings.jwt_secret) < 32:
+        raise RuntimeError(
+            "JWT_SECRET must be set to a >=32-byte random value in production"
+        )
+    if not settings.cookie_secure:
+        raise RuntimeError(
+            "COOKIE_SECURE must be true in production (HTTPS-only cookies)"
+        )
+
+
+_enforce_production_safety()
+
 
 app = FastAPI(
     title="fsbo-data-platform",

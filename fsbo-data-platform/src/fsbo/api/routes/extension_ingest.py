@@ -17,6 +17,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from fsbo.auth.resolver import DealerId
 from fsbo.db import get_session
 from fsbo.enrichment.attributes import extract as extract_attrs
 from fsbo.enrichment.authenticity import score_authenticity
@@ -110,8 +111,11 @@ class ListingStats(BaseModel):
 
 @router.post("/sources/extension/ingest", response_model=IngestOut)
 async def ingest(
-    payload: IngestIn, db: Annotated[Session, Depends(get_session)]
+    payload: IngestIn,
+    dealer_id: DealerId,
+    db: Annotated[Session, Depends(get_session)],
 ) -> IngestOut:
+    _ = dealer_id  # auth-only; corpus is global, but we refuse anonymous writers
     norm = _to_normalized(payload.listing)
 
     if norm.vin and not (norm.year and norm.make and norm.model):
@@ -241,8 +245,11 @@ async def ingest(
 
 @router.post("/sources/extension/ingest/batch", response_model=IngestBatchOut)
 def ingest_batch(
-    payload: IngestBatchIn, db: Annotated[Session, Depends(get_session)]
+    payload: IngestBatchIn,
+    dealer_id: DealerId,
+    db: Annotated[Session, Depends(get_session)],
 ) -> IngestBatchOut:
+    _ = dealer_id  # auth-only; corpus is global
     """Thin-tile batch ingest from the Facebook Marketplace feed harvester.
 
     Fast path: no VIN decode, no market comps, no LLM. We insert a minimal
@@ -312,9 +319,11 @@ def ingest_batch(
 
 @router.get("/sources/extension/lookup", response_model=LookupOut)
 def lookup(
+    dealer_id: DealerId,
     db: Annotated[Session, Depends(get_session)],
     url: str = Query(..., min_length=5),
 ) -> LookupOut:
+    _ = dealer_id
     clean = url.split("?")[0].rstrip("/")
     existing = db.scalar(
         select(Listing).where(Listing.url.like(f"{clean}%")).limit(1)
@@ -326,8 +335,11 @@ def lookup(
 
 @router.get("/listings/{listing_id}/stats", response_model=ListingStats)
 def listing_stats(
-    listing_id: int, db: Annotated[Session, Depends(get_session)]
+    listing_id: int,
+    dealer_id: DealerId,
+    db: Annotated[Session, Depends(get_session)],
 ) -> ListingStats:
+    _ = dealer_id
     listing = db.get(Listing, listing_id)
     if not listing:
         raise HTTPException(404, "listing not found")
@@ -414,8 +426,11 @@ class VehicleFile(BaseModel):
 
 @router.get("/listings/{listing_id}/vehicle-file", response_model=VehicleFile)
 def vehicle_file(
-    listing_id: int, db: Annotated[Session, Depends(get_session)]
+    listing_id: int,
+    dealer_id: DealerId,
+    db: Annotated[Session, Depends(get_session)],
 ) -> VehicleFile:
+    _ = dealer_id
     base = db.get(Listing, listing_id)
     if not base:
         raise HTTPException(404, "listing not found")
@@ -528,8 +543,11 @@ def vehicle_file(
 
 @router.get("/listings/{listing_id}/duplicates", response_model=list[DuplicateRow])
 def duplicates_of(
-    listing_id: int, db: Annotated[Session, Depends(get_session)]
+    listing_id: int,
+    dealer_id: DealerId,
+    db: Annotated[Session, Depends(get_session)],
 ) -> list[DuplicateRow]:
+    _ = dealer_id
     base = db.get(Listing, listing_id)
     if not base:
         raise HTTPException(404, "listing not found")

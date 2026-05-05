@@ -41,6 +41,9 @@ def client(db_session):
             pass
 
     app.dependency_overrides[get_session] = _override
-    with TestClient(app) as c:
+    # Default X-Dealer-Id header so the auth resolver's dev fallback fires
+    # for tests that don't care about auth. Tests that pass their own
+    # headers={"X-Dealer-Id": ...} still override per-request.
+    with TestClient(app, headers={"X-Dealer-Id": "demo-dealer"}) as c:
         yield c
     app.dependency_overrides.clear()

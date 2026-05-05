@@ -3,17 +3,16 @@
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from fsbo.auth.resolver import DealerId
 from fsbo.db import get_session
 from fsbo.models import SavedSearch
 
 router = APIRouter(prefix="/saved-searches", tags=["saved-searches"])
-
-DealerIdHeader = Annotated[str, Header(alias="X-Dealer-Id")]
 
 
 class SavedSearchIn(BaseModel):
@@ -36,7 +35,7 @@ class SavedSearchOut(BaseModel):
 
 @router.get("", response_model=list[SavedSearchOut])
 def list_searches(
-    dealer_id: DealerIdHeader, db: Annotated[Session, Depends(get_session)]
+    dealer_id: DealerId, db: Annotated[Session, Depends(get_session)]
 ) -> list[SavedSearchOut]:
     rows = db.scalars(
         select(SavedSearch)
@@ -49,7 +48,7 @@ def list_searches(
 @router.post("", response_model=SavedSearchOut, status_code=201)
 def create_search(
     payload: SavedSearchIn,
-    dealer_id: DealerIdHeader,
+    dealer_id: DealerId,
     db: Annotated[Session, Depends(get_session)],
 ) -> SavedSearchOut:
     existing = db.scalar(
@@ -77,7 +76,7 @@ def create_search(
 @router.delete("/{search_id}", status_code=204)
 def delete_search(
     search_id: int,
-    dealer_id: DealerIdHeader,
+    dealer_id: DealerId,
     db: Annotated[Session, Depends(get_session)],
 ) -> None:
     row = db.get(SavedSearch, search_id)

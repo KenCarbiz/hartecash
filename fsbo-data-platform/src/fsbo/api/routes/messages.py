@@ -3,18 +3,17 @@
 from datetime import datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Form, Header, HTTPException
+from fastapi import APIRouter, Depends, Form, HTTPException
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from fsbo.auth.resolver import DealerId
 from fsbo.db import get_session
 from fsbo.messaging.twilio_client import send_sms
 from fsbo.models import Interaction, InteractionKind, Lead, Listing, Message
 
 router = APIRouter(tags=["messaging"])
-
-DealerIdHeader = Annotated[str, Header(alias="X-Dealer-Id")]
 
 
 class SendSmsIn(BaseModel):
@@ -49,7 +48,7 @@ class MessageOut(BaseModel):
 @router.post("/messages/send", response_model=SendSmsOut)
 async def send(
     payload: SendSmsIn,
-    dealer_id: DealerIdHeader,
+    dealer_id: DealerId,
     db: Annotated[Session, Depends(get_session)],
 ) -> SendSmsOut:
     lead = db.get(Lead, payload.lead_id)
@@ -98,7 +97,7 @@ async def send(
 @router.get("/leads/{lead_id}/messages", response_model=list[MessageOut])
 def list_messages(
     lead_id: int,
-    dealer_id: DealerIdHeader,
+    dealer_id: DealerId,
     db: Annotated[Session, Depends(get_session)],
 ) -> list[MessageOut]:
     lead = db.get(Lead, lead_id)

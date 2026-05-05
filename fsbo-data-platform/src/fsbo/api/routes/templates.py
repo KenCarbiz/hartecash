@@ -3,19 +3,17 @@
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from fsbo.auth.resolver import DealerId
 from fsbo.db import get_session
 from fsbo.models import Lead, Listing, MessageTemplate
 from fsbo.templates.render import SEED_TEMPLATES, build_context, render
 
 router = APIRouter(tags=["templates"])
-
-
-DealerIdHeader = Annotated[str, Header(alias="X-Dealer-Id")]
 
 
 class TemplateIn(BaseModel):
@@ -44,7 +42,7 @@ class RenderedTemplate(BaseModel):
 
 @router.get("/templates", response_model=list[TemplateOut])
 def list_templates(
-    dealer_id: DealerIdHeader,
+    dealer_id: DealerId,
     db: Annotated[Session, Depends(get_session)],
     category: str | None = None,
 ) -> list[TemplateOut]:
@@ -59,7 +57,7 @@ def list_templates(
 @router.post("/templates", response_model=TemplateOut, status_code=201)
 def create_template(
     payload: TemplateIn,
-    dealer_id: DealerIdHeader,
+    dealer_id: DealerId,
     db: Annotated[Session, Depends(get_session)],
 ) -> TemplateOut:
     tpl = MessageTemplate(
@@ -85,7 +83,7 @@ class TemplatePatch(BaseModel):
 def update_template(
     template_id: int,
     payload: TemplatePatch,
-    dealer_id: DealerIdHeader,
+    dealer_id: DealerId,
     db: Annotated[Session, Depends(get_session)],
 ) -> TemplateOut:
     tpl = db.get(MessageTemplate, template_id)
@@ -106,7 +104,7 @@ def update_template(
 @router.delete("/templates/{template_id}", status_code=204)
 def delete_template(
     template_id: int,
-    dealer_id: DealerIdHeader,
+    dealer_id: DealerId,
     db: Annotated[Session, Depends(get_session)],
 ) -> None:
     tpl = db.get(MessageTemplate, template_id)
@@ -121,7 +119,7 @@ def delete_template(
 def render_template(
     template_id: int,
     listing_id: int,
-    dealer_id: DealerIdHeader,
+    dealer_id: DealerId,
     db: Annotated[Session, Depends(get_session)],
 ) -> RenderedTemplate:
     tpl = db.get(MessageTemplate, template_id)

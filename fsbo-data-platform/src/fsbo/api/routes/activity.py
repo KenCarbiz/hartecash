@@ -7,17 +7,16 @@ Dealers hit daily outreach goals; we show progress and streaks.
 from datetime import date, datetime, timedelta, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from fsbo.auth.resolver import DealerId
 from fsbo.db import get_session
 from fsbo.models import DailyActivity
 
 router = APIRouter(prefix="/activity", tags=["activity"])
-
-DealerIdHeader = Annotated[str, Header(alias="X-Dealer-Id")]
 
 
 class ActivityBump(BaseModel):
@@ -75,7 +74,7 @@ def _get_or_create(
 @router.post("/bump", response_model=ActivityOut)
 def bump_activity(
     payload: ActivityBump,
-    dealer_id: DealerIdHeader,
+    dealer_id: DealerId,
     db: Annotated[Session, Depends(get_session)],
 ) -> ActivityOut:
     row = _get_or_create(db, dealer_id, payload.user_id, _today_iso())
@@ -89,7 +88,7 @@ def bump_activity(
 
 @router.get("/today", response_model=ActivityOut)
 def today(
-    dealer_id: DealerIdHeader,
+    dealer_id: DealerId,
     db: Annotated[Session, Depends(get_session)],
     user_id: str = "me",
 ) -> ActivityOut:
@@ -99,7 +98,7 @@ def today(
 
 @router.get("/summary", response_model=BattleSummary)
 def summary(
-    dealer_id: DealerIdHeader,
+    dealer_id: DealerId,
     db: Annotated[Session, Depends(get_session)],
     user_id: str = "me",
 ) -> BattleSummary:

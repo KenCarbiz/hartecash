@@ -28,6 +28,7 @@ class ListingFactsPatch(BaseModel):
 
 @router.get("", response_model=ListingsPage)
 def list_listings(
+    dealer_id: DealerId,
     db: Annotated[Session, Depends(get_session)],
     source: str | None = None,
     make: str | None = None,
@@ -56,6 +57,7 @@ def list_listings(
     limit: int = Query(50, le=500),
     offset: int = 0,
 ) -> ListingsPage:
+    _ = dealer_id  # auth-only; corpus is shared across dealers
     stmt = select(Listing)
     count_stmt = select(func.count()).select_from(Listing)
 
@@ -139,8 +141,11 @@ def list_listings(
 
 @router.get("/{listing_id}", response_model=ListingOut)
 def get_listing(
-    listing_id: int, db: Annotated[Session, Depends(get_session)]
+    listing_id: int,
+    dealer_id: DealerId,
+    db: Annotated[Session, Depends(get_session)],
 ) -> ListingOut:
+    _ = dealer_id  # auth-only; corpus is shared across dealers
     row = db.get(Listing, listing_id)
     if not row:
         raise HTTPException(status_code=404, detail="listing not found")

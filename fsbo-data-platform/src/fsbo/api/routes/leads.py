@@ -1,7 +1,8 @@
 """Lead + interaction CRM endpoints.
 
-Dealer scoping: every endpoint takes an X-Dealer-Id header (stubbed auth).
-Real auth will replace this header with JWT-derived dealer context later.
+Dealer scoping: every endpoint resolves dealer_id via the auth resolver
+(session cookie → API token → dev-only header). Raw X-Dealer-Id headers
+are rejected in production.
 """
 
 import csv
@@ -10,12 +11,13 @@ from collections.abc import Iterator
 from datetime import datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
+from fsbo.auth.resolver import DealerId
 from fsbo.db import get_session
 from fsbo.models import (
     InteractionKind,
@@ -27,9 +29,6 @@ from fsbo.models import (
 )
 
 router = APIRouter(tags=["crm"])
-
-
-DealerIdHeader = Annotated[str, Header(alias="X-Dealer-Id")]
 
 
 class LeadIn(BaseModel):
@@ -101,7 +100,7 @@ class InteractionOut(BaseModel):
 @router.post("/leads", response_model=LeadOut, status_code=201)
 def create_lead(
     payload: LeadIn,
-    dealer_id: DealerIdHeader,
+    dealer_id: DealerId,
     db: Annotated[Session, Depends(get_session)],
 ) -> LeadOut:
     if not db.get(Listing, payload.listing_id):
@@ -140,7 +139,7 @@ class BulkClaimOut(BaseModel):
 @router.post("/leads/bulk-claim", response_model=BulkClaimOut)
 def bulk_claim(
     payload: BulkClaimIn,
-    dealer_id: DealerIdHeader,
+    dealer_id: DealerId,
     db: Annotated[Session, Depends(get_session)],
 ) -> BulkClaimOut:
     if not payload.listing_ids:
@@ -186,7 +185,7 @@ class TeammateRow(BaseModel):
 
 @router.get("/leads/teammates", response_model=list[TeammateRow])
 def list_teammates(
-    dealer_id: DealerIdHeader,
+    dealer_id: DealerId,
     db: Annotated[Session, Depends(get_session)],
 ) -> list[TeammateRow]:
     """People at this dealer who can be assigned a lead."""
@@ -200,7 +199,7 @@ def list_teammates(
 
 @router.get("/leads/export.csv")
 def export_leads_csv(
-    dealer_id: DealerIdHeader,
+    dealer_id: DealerId,
     db: Annotated[Session, Depends(get_session)],
     status: LeadStatus | None = None,
     assigned_to: str | None = None,
@@ -297,7 +296,7 @@ def export_leads_csv(
 
 @router.get("/leads", response_model=list[LeadWithListing])
 def list_leads(
-    dealer_id: DealerIdHeader,
+    dealer_id: DealerId,
     db: Annotated[Session, Depends(get_session)],
     status: LeadStatus | None = None,
     assigned_to: str | None = None,
@@ -346,7 +345,7 @@ def list_leads(
 @router.get("/leads/by-listing/{listing_id}", response_model=LeadOut | None)
 def get_lead_by_listing(
     listing_id: int,
-    dealer_id: DealerIdHeader,
+    dealer_id: DealerId,
     db: Annotated[Session, Depends(get_session)],
 ) -> LeadOut | None:
     lead = db.scalar(
@@ -360,7 +359,7 @@ def get_lead_by_listing(
 @router.get("/leads/{lead_id}", response_model=LeadOut)
 def get_lead(
     lead_id: int,
-    dealer_id: DealerIdHeader,
+    dealer_id: DealerId,
     db: Annotated[Session, Depends(get_session)],
 ) -> LeadOut:
     lead = _require_lead(db, lead_id, dealer_id)
@@ -371,7 +370,7 @@ def get_lead(
 def update_lead(
     lead_id: int,
     payload: LeadPatch,
-    dealer_id: DealerIdHeader,
+    dealer_id: DealerId,
     db: Annotated[Session, Depends(get_session)],
 ) -> LeadOut:
     lead = _require_lead(db, lead_id, dealer_id)
@@ -408,7 +407,7 @@ def update_lead(
 def create_interaction(
     lead_id: int,
     payload: InteractionIn,
-    dealer_id: DealerIdHeader,
+    dealer_id: DealerId,
     db: Annotated[Session, Depends(get_session)],
 ) -> InteractionOut:
     lead = _require_lead(db, lead_id, dealer_id)
@@ -429,7 +428,7 @@ def create_interaction(
 @router.get("/leads/{lead_id}/interactions", response_model=list[InteractionOut])
 def list_interactions(
     lead_id: int,
-    dealer_id: DealerIdHeader,
+    dealer_id: DealerId,
     db: Annotated[Session, Depends(get_session)],
 ) -> list[InteractionOut]:
     _require_lead(db, lead_id, dealer_id)
@@ -448,7 +447,7 @@ def list_interactions(
 def complete_interaction(
     lead_id: int,
     interaction_id: int,
-    dealer_id: DealerIdHeader,
+    dealer_id: DealerId,
     db: Annotated[Session, Depends(get_session)],
 ) -> InteractionOut:
     _require_lead(db, lead_id, dealer_id)
