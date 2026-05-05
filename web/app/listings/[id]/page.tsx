@@ -69,16 +69,24 @@ export default async function ListingDetailPage({
   const listingId = Number(id);
   if (!Number.isFinite(listingId)) notFound();
 
-  const listing = await getListing(listingId);
+  // Listing is required for the page; everything else is parallel-safe.
+  // Lead must come before interactions (interactions needs lead.id) so we
+  // run lead+listing first, then fan out the rest in one Promise.all.
+  const [listing, lead] = await Promise.all([
+    getListing(listingId),
+    getLeadForListing(listingId).catch(() => null),
+  ]);
   if (!listing) notFound();
 
-  const lead = await getLeadForListing(listingId).catch(() => null);
-  const interactions = lead ? await listInteractions(lead.id).catch(() => []) : [];
-  const templates = await listTemplates().catch(() => []);
-  const teammates = await listTeammates().catch(() => []);
-  const vehicleFile = await getVehicleFile(listingId).catch(() => null);
-  const market = await getMarketEstimate(listingId).catch(() => null);
-  const stats = await getListingStats(listingId).catch(() => null);
+  const [interactions, templates, teammates, vehicleFile, market, stats] =
+    await Promise.all([
+      lead ? listInteractions(lead.id).catch(() => []) : Promise.resolve([]),
+      listTemplates().catch(() => []),
+      listTeammates().catch(() => []),
+      getVehicleFile(listingId).catch(() => null),
+      getMarketEstimate(listingId).catch(() => null),
+      getListingStats(listingId).catch(() => null),
+    ]);
 
   const vehicleLine = [listing.year, listing.make, listing.model, listing.trim]
     .filter(Boolean)

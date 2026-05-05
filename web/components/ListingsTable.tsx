@@ -38,7 +38,8 @@ export function ListingsTable({ listings }: { listings: Listing[] }) {
   return (
     <>
       <div className="panel overflow-hidden">
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[900px] text-sm">
           <thead className="bg-ink-50 text-xs uppercase tracking-wide text-ink-500">
             <tr>
               <th className="w-10 px-3 py-2.5">
@@ -122,6 +123,7 @@ export function ListingsTable({ listings }: { listings: Listing[] }) {
             })}
           </tbody>
         </table>
+        </div>
       </div>
       <BulkClaimBar selected={selected} onClear={() => setSelected([])} />
     </>

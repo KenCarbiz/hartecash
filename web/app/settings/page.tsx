@@ -55,14 +55,23 @@ export default async function SettingsPage() {
         <div className="panel p-5">
           <h2 className="text-sm font-semibold">Dealer profile</h2>
           <p className="text-xs text-ink-500 mt-0.5">
-            Dealer identity is currently stubbed. Auth wiring is next.
+            Identity derived from your active session.
           </p>
-          <dl className="mt-4 grid grid-cols-2 gap-4 text-sm">
-            <Field label="Dealer ID" value="demo-dealer" />
-            <Field label="Mode" value="Development" />
-            <Field label="Default user" value="me" />
-            <Field label="Daily message goal" value="60" />
-          </dl>
+          {user ? (
+            <dl className="mt-4 grid grid-cols-2 gap-4 text-sm">
+              <Field label="Dealer ID" value={user.dealer_id} />
+              <Field label="Signed in as" value={user.name ?? user.email} />
+              <Field label="Email" value={user.email} />
+              <Field
+                label="Role"
+                value={user.role.charAt(0).toUpperCase() + user.role.slice(1)}
+              />
+            </dl>
+          ) : (
+            <p className="mt-4 text-sm text-amber-700">
+              Not signed in. Sign in to see your dealer profile.
+            </p>
+          )}
         </div>
 
         {prefs && <NotificationsPanel prefs={prefs} />}

@@ -4,14 +4,19 @@ import { LoginForm } from "@/components/auth/LoginForm";
 
 export const dynamic = "force-dynamic";
 
-export default function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>;
+}) {
+  const { next } = await searchParams;
   return (
     <div className="panel p-6">
       <h1 className="text-lg font-semibold">Sign in</h1>
       <p className="mt-1 text-sm text-ink-500">
         Welcome back. Sign in to your acquisition dashboard.
       </p>
-      <LoginForm action={loginAction} />
+      <LoginForm action={loginAction} next={next} />
       <div className="mt-6 flex items-center justify-between text-xs text-ink-500">
         <Link
           href="/forgot-password"

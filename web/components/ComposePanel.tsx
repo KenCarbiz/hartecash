@@ -63,7 +63,14 @@ export function ComposePanel({
   };
 
   const sendText = () => {
-    if (!message.trim() || !leadId) return;
+    if (!message.trim() || !leadId || !sellerPhone) return;
+    // Two-step confirm: misfires here = wrong-number outreach to a real
+    // phone number, which is both embarrassing and a TCPA risk.
+    const display = formatPhone(sellerPhone);
+    const ok = window.confirm(
+      `Send this SMS to ${display}?\n\n${message}`,
+    );
+    if (!ok) return;
     startTransition(async () => {
       const res = await sendSmsAction(leadId, listingId, message);
       if (res.status === "skipped") {
@@ -142,6 +149,16 @@ export function ComposePanel({
           </div>
         )}
 
+        {sellerPhone ? (
+          <p className="rounded-md border border-ink-200 bg-ink-50 px-2.5 py-1.5 text-[11px] text-ink-600">
+            Recipient: <span className="font-mono text-ink-900">{formatPhone(sellerPhone)}</span>
+          </p>
+        ) : (
+          <p className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-800">
+            No seller phone on this listing — Send disabled.
+          </p>
+        )}
+
         <textarea
           value={message}
           onChange={(e) => setMessage(e.target.value)}
@@ -180,4 +197,10 @@ export function ComposePanel({
       </div>
     </div>
   );
+}
+
+function formatPhone(raw: string): string {
+  const digits = raw.replace(/\D/g, "").slice(-10);
+  if (digits.length !== 10) return raw;
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
 }

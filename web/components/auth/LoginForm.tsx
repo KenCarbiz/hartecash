@@ -6,7 +6,13 @@ interface ActionFn {
   (formData: FormData): Promise<{ ok: boolean; error?: string }>;
 }
 
-export function LoginForm({ action }: { action: ActionFn }) {
+export function LoginForm({
+  action,
+  next,
+}: {
+  action: ActionFn;
+  next?: string;
+}) {
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -20,6 +26,7 @@ export function LoginForm({ action }: { action: ActionFn }) {
 
   return (
     <form action={submit} className="mt-5 space-y-3">
+      {next && <input type="hidden" name="next" value={next} />}
       <Field
         label="Email"
         name="email"

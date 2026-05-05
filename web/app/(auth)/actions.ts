@@ -59,7 +59,19 @@ export async function loginAction(formData: FormData): Promise<AuthResult> {
     return { ok: false, error: body.detail || "Login failed" };
   }
   await forwardSetCookie(res);
-  redirect("/");
+  redirect(safeNext(formData.get("next")));
+}
+
+/** Validate a `?next=` redirect target. Must be a same-origin relative
+ *  path to prevent open-redirect attacks (//evil.com would let an
+ *  attacker craft a phishing URL that bounces through our login). */
+function safeNext(raw: FormDataEntryValue | null): string {
+  if (typeof raw !== "string" || !raw) return "/";
+  // Must start with a single "/" and not "//" or "/\"
+  if (!raw.startsWith("/") || raw.startsWith("//") || raw.startsWith("/\\")) {
+    return "/";
+  }
+  return raw;
 }
 
 export async function registerAction(formData: FormData): Promise<AuthResult> {
