@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import { PageHeader } from "@/components/AppShell";
 import { ApiKeysPanel } from "@/components/ApiKeysPanel";
+import { BillingPanel } from "@/components/BillingPanel";
 import { ExtensionInstallPanel } from "@/components/ExtensionInstallPanel";
 import { InvitationsPanel } from "@/components/InvitationsPanel";
 import { NotificationsPanel } from "@/components/NotificationsPanel";
@@ -9,6 +10,7 @@ import {
   FsboApiError,
   getCurrentUser,
   getNotificationPrefs,
+  getSubscription,
   listApiKeys,
   listInvitations,
   listTemplates,
@@ -32,6 +34,7 @@ export default async function SettingsPage() {
   }
   const prefs = await getNotificationPrefs().catch(() => null);
   const templates = await listTemplates().catch(() => []);
+  const subscription = await getSubscription().catch(() => null);
 
   // Build the app origin so we can render full invite URLs.
   const h = await headers();
@@ -74,6 +77,8 @@ export default async function SettingsPage() {
             </p>
           )}
         </div>
+
+        <BillingPanel subscription={subscription} origin={appOrigin} />
 
         {prefs && <NotificationsPanel prefs={prefs} />}
 

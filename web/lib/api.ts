@@ -918,3 +918,50 @@ export function formatRelativeDate(value: string | null): string {
   if (days < 30) return `${days}d ago`;
   return then.toLocaleDateString();
 }
+
+// ---------- billing ----------
+
+export interface SubscriptionStatus {
+  plan: "starter" | "pro" | "performance" | null;
+  status: string;
+  current_period_end: string | null;
+  cancel_at_period_end: boolean;
+}
+
+export async function getSubscription(): Promise<SubscriptionStatus | null> {
+  const res = await apiFetch("/billing/subscription");
+  if (!res.ok) return null;
+  return (await res.json()) as SubscriptionStatus;
+}
+
+export async function startCheckout(
+  plan: "starter" | "pro" | "performance",
+  successUrl: string,
+  cancelUrl: string,
+): Promise<string> {
+  const res = await apiFetch("/billing/checkout", {
+    method: "POST",
+    body: JSON.stringify({
+      plan,
+      success_url: successUrl,
+      cancel_url: cancelUrl,
+    }),
+  });
+  if (!res.ok) {
+    throw new FsboApiError(`FSBO API ${res.status}`, res.status, await res.text());
+  }
+  const body = (await res.json()) as { url: string };
+  return body.url;
+}
+
+export async function openBillingPortal(returnUrl: string): Promise<string> {
+  const res = await apiFetch(
+    `/billing/portal?return_url=${encodeURIComponent(returnUrl)}`,
+    { method: "POST" },
+  );
+  if (!res.ok) {
+    throw new FsboApiError(`FSBO API ${res.status}`, res.status, await res.text());
+  }
+  const body = (await res.json()) as { url: string };
+  return body.url;
+}
