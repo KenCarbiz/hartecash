@@ -147,6 +147,12 @@ PROTECTED_ENDPOINTS: list[tuple[str, str, dict | None]] = [
     ("GET", "/webhooks/subscriptions", None),
     ("DELETE", "/webhooks/subscriptions/1", None),
     ("GET", "/webhooks/events", None),
+    # Multi-rooftop dealer groups
+    ("POST", "/groups", {"name": "Acme", "slug": "acme"}),
+    ("GET", "/groups/me", None),
+    ("POST", "/groups/acme/dealers", {"dealer_slug": "tampa"}),
+    ("DELETE", "/groups/acme/dealers/tampa", None),
+    ("GET", "/analytics/group-funnel", None),
     # Admin
     ("POST", "/admin/rescore", None),
 ]

@@ -290,6 +290,36 @@ class Dealer(Base):
     routing_pool: Mapped[list] = mapped_column(
         JSON, default=list, nullable=False
     )
+    # Multi-rooftop: dealers sharing a group_id roll up into a single
+    # GM dashboard via /analytics/group-funnel. Nullable — most
+    # dealers are independent.
+    group_id: Mapped[int | None] = mapped_column(Integer, index=True)
+
+
+class DealerGroup(Base):
+    """A franchise group / multi-rooftop owner. Each member Dealer
+    keeps its own listings + leads + users + billing; the group
+    layer is purely for cohort analytics.
+
+    Membership is denormalized: every Dealer.group_id pointing at this
+    DealerGroup is a member. Owner_dealer_id is the slug of the dealer
+    that created the group; today only the owner can add/remove
+    members. Richer permissions later.
+    """
+
+    __tablename__ = "dealer_groups"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    slug: Mapped[str] = mapped_column(
+        String(64), unique=True, nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    owner_dealer_id: Mapped[str] = mapped_column(
+        String(64), nullable=False, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
 
 
 class Subscription(Base):

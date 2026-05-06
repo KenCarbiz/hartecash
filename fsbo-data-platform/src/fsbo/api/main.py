@@ -10,6 +10,7 @@ from fsbo.api.routes import (
     billing,
     extension_ingest,
     extension_onboarding,
+    groups,
     invitations,
     leads,
     listings,
@@ -81,6 +82,7 @@ app.include_router(tcpa.router)
 app.include_router(voice.router)
 app.include_router(offers.router)
 app.include_router(routing.router)
+app.include_router(groups.router)
 
 
 @app.get("/health")

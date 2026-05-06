@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 
 from fsbo.auth.resolver import DealerId
 from fsbo.db import get_session
-from fsbo.models import Classification, Interaction, Lead, Listing
+from fsbo.models import Classification, Dealer, DealerGroup, Interaction, Lead, Listing
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
@@ -394,4 +394,133 @@ def leaderboard(
 
     return LeaderboardResponse(
         dealer_id=dealer_id, since=since, until=until, reps=reps
+    )
+
+
+# ---- Multi-rooftop rollup ---------------------------------------------
+
+
+class RooftopFunnelRow(BaseModel):
+    dealer_id: str
+    leads_claimed: int
+    leads_contacted: int
+    leads_appointment: int
+    leads_purchased: int
+
+
+class GroupFunnelResponse(BaseModel):
+    group_slug: str
+    group_name: str
+    since: datetime
+    until: datetime
+    rooftops: list[RooftopFunnelRow]
+    totals: RooftopFunnelRow
+
+
+@router.get("/group-funnel", response_model=GroupFunnelResponse)
+def group_funnel(
+    dealer_id: DealerId,
+    db: Annotated[Session, Depends(get_session)],
+    days: int = Query(30, ge=1, le=365),
+) -> GroupFunnelResponse:
+    """Roll-up funnel across every Dealer in the calling user's
+    DealerGroup. Members of the same group all see the same rollup;
+    dealers without a group get a 404.
+    """
+    dealer = db.scalar(select(Dealer).where(Dealer.slug == dealer_id))
+    if not dealer or dealer.group_id is None:
+        from fastapi import HTTPException
+
+        raise HTTPException(404, "dealer is not in a group")
+    group = db.get(DealerGroup, dealer.group_id)
+    if not group:
+        from fastapi import HTTPException
+
+        raise HTTPException(404, "group not found")
+
+    member_slugs = list(
+        db.scalars(
+            select(Dealer.slug).where(Dealer.group_id == group.id)
+        ).all()
+    )
+    until = datetime.now(timezone.utc)
+    since = until - timedelta(days=days)
+
+    rows: list[RooftopFunnelRow] = []
+    totals = {"claimed": 0, "contacted": 0, "appointment": 0, "purchased": 0}
+    for slug in member_slugs:
+        claimed = (
+            db.scalar(
+                select(func.count())
+                .select_from(Lead)
+                .where(Lead.dealer_id == slug, Lead.created_at >= since)
+            )
+            or 0
+        )
+        contacted = (
+            db.scalar(
+                select(func.count(func.distinct(Interaction.lead_id)))
+                .select_from(Interaction)
+                .join(Lead, Lead.id == Interaction.lead_id)
+                .where(
+                    Lead.dealer_id == slug,
+                    Interaction.direction == "outbound",
+                    Interaction.created_at >= since,
+                )
+            )
+            or 0
+        )
+        appointment = (
+            db.scalar(
+                select(func.count())
+                .select_from(Lead)
+                .where(
+                    Lead.dealer_id == slug,
+                    Lead.status == "appointment",
+                    Lead.updated_at >= since,
+                )
+            )
+            or 0
+        )
+        purchased = (
+            db.scalar(
+                select(func.count())
+                .select_from(Lead)
+                .where(
+                    Lead.dealer_id == slug,
+                    Lead.status == "purchased",
+                    Lead.updated_at >= since,
+                )
+            )
+            or 0
+        )
+        rows.append(
+            RooftopFunnelRow(
+                dealer_id=slug,
+                leads_claimed=int(claimed),
+                leads_contacted=int(contacted),
+                leads_appointment=int(appointment),
+                leads_purchased=int(purchased),
+            )
+        )
+        totals["claimed"] += int(claimed)
+        totals["contacted"] += int(contacted)
+        totals["appointment"] += int(appointment)
+        totals["purchased"] += int(purchased)
+
+    rows.sort(key=lambda r: r.leads_purchased, reverse=True)
+
+    return GroupFunnelResponse(
+        group_slug=group.slug,
+        group_name=group.name,
+        since=since,
+        until=until,
+        rooftops=rows,
+        totals=RooftopFunnelRow(
+            dealer_id="(total)",
+            leads_claimed=totals["claimed"],
+            leads_contacted=totals["contacted"],
+            leads_appointment=totals["appointment"],
+            leads_purchased=totals["purchased"],
+        ),
     )
