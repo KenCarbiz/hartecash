@@ -444,6 +444,7 @@ export interface Lead {
   notes: string | null;
   created_at: string;
   updated_at: string;
+  first_responded_at: string | null;
   // Present on inbox list endpoint (LeadWithListing); absent on single-lead lookup.
   listing_title?: string | null;
   listing_year?: number | null;

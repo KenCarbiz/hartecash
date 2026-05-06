@@ -624,6 +624,13 @@ class Lead(Base):
     # extracted yet. Updates accumulate (later calls overwrite missing
     # fields, never erase known ones).
     seller_intake: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    # Timestamp of the first outbound contact on this lead (SMS, email,
+    # voice call, or status change to 'contacted'). Stamped once and
+    # never updated. Powers per-lead response-SLA reporting + manager
+    # coaching ("rep took 3 hours to first-touch this lead").
+    first_responded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), index=True
+    )
 
 
 class Offer(Base):

@@ -56,6 +56,7 @@ class LeadOut(BaseModel):
     notes: str | None
     created_at: datetime
     updated_at: datetime
+    first_responded_at: datetime | None = None
 
 
 class LeadWithListing(LeadOut):
@@ -567,6 +568,7 @@ def list_leads(
             notes=lead.notes,
             created_at=lead.created_at,
             updated_at=lead.updated_at,
+            first_responded_at=lead.first_responded_at,
             listing_title=listing.title,
             listing_year=listing.year,
             listing_make=listing.make,
@@ -686,6 +688,7 @@ def list_stale_leads(
                 notes=lead.notes,
                 created_at=lead.created_at,
                 updated_at=lead.updated_at,
+                first_responded_at=lead.first_responded_at,
                 listing_title=listing.title,
                 listing_year=listing.year,
                 listing_make=listing.make,
@@ -857,6 +860,10 @@ def create_interaction(
         meta=payload.meta,
     )
     db.add(interaction)
+    if (payload.direction or "").lower() == "outbound":
+        from fsbo.crm.response import mark_first_response
+
+        mark_first_response(lead)
     lead.updated_at = datetime.now(timezone.utc)
     db.flush()
     return InteractionOut.model_validate(interaction)

@@ -169,6 +169,12 @@ export default async function LeadsPage({
                 <th className="text-right font-medium px-4 py-2.5">Price</th>
                 <th className="text-left font-medium px-4 py-2.5">Assigned</th>
                 <th className="text-left font-medium px-4 py-2.5">Status</th>
+                <th
+                  className="text-right font-medium px-4 py-2.5"
+                  title="Time from lead creation to first outbound contact"
+                >
+                  First touch
+                </th>
                 <th className="text-right font-medium px-4 py-2.5">Updated</th>
               </tr>
             </thead>
@@ -215,6 +221,13 @@ export default async function LeadsPage({
                         {l.status.replace("_", " ")}
                       </span>
                     </td>
+                    <td className="px-4 py-3 text-right text-xs tabular">
+                      <FirstTouch
+                        createdAt={l.created_at}
+                        firstRespondedAt={l.first_responded_at ?? null}
+                        status={l.status}
+                      />
+                    </td>
                     <td className="px-4 py-3 text-right text-xs text-ink-500 tabular">
                       {formatRelativeDate(l.updated_at)}
                     </td>
@@ -233,6 +246,51 @@ function countByStatus(leads: Lead[]): Record<string, number> {
   const out: Record<string, number> = {};
   for (const l of leads) out[l.status] = (out[l.status] ?? 0) + 1;
   return out;
+}
+
+function FirstTouch({
+  createdAt,
+  firstRespondedAt,
+  status,
+}: {
+  createdAt: string;
+  firstRespondedAt: string | null;
+  status: LeadStatus;
+}) {
+  if (firstRespondedAt) {
+    const minutes = Math.max(
+      0,
+      Math.round(
+        (new Date(firstRespondedAt).getTime() - new Date(createdAt).getTime()) /
+          60000,
+      ),
+    );
+    const tone =
+      minutes <= 5
+        ? "text-emerald-700"
+        : minutes <= 60
+          ? "text-ink-600"
+          : "text-amber-700";
+    return <span className={tone}>{formatMinutes(minutes)}</span>;
+  }
+  // Not yet responded. Settled leads (purchased/lost) just show a dash.
+  if (status === "purchased" || status === "lost") {
+    return <span className="text-ink-400">—</span>;
+  }
+  // Active lead with no first-touch yet — color by how stale it is.
+  const stale = Math.round(
+    (Date.now() - new Date(createdAt).getTime()) / 60000,
+  );
+  const tone = stale > 60 ? "text-rose-700" : stale > 5 ? "text-amber-700" : "text-ink-500";
+  return <span className={tone}>not yet</span>;
+}
+
+function formatMinutes(m: number): string {
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h`;
+  const d = Math.floor(h / 24);
+  return `${d}d`;
 }
 
 function StatusChip({

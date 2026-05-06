@@ -106,6 +106,10 @@ def start_call(
         status="queued",
     )
     db.add(call)
+    # Initiating an outbound voice call counts as first response.
+    from fsbo.crm.response import mark_first_response
+
+    mark_first_response(lead)
     db.flush()
 
     # In dev / when Twilio isn't configured, return the row in 'simulated'
@@ -509,6 +513,10 @@ def start_bridge_call(
         status="queued",
     )
     db.add(call)
+    # Click-to-call bridge counts as first response (rep is engaging).
+    from fsbo.crm.response import mark_first_response
+
+    mark_first_response(lead)
     db.flush()
 
     if not (

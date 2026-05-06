@@ -121,6 +121,9 @@ async def send(
             body=payload.body,
         )
     )
+    from fsbo.crm.response import mark_first_response
+
+    mark_first_response(lead)
     lead.updated_at = datetime.now(timezone.utc)
     db.flush()
 
@@ -227,6 +230,10 @@ async def send_email_to_seller(
             body=payload.body,
         )
     )
+    from fsbo.crm.response import mark_first_response
+
+    if result.sent:
+        mark_first_response(lead)
     lead.updated_at = datetime.now(timezone.utc)
     db.flush()
 
