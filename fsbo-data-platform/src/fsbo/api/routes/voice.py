@@ -441,6 +441,150 @@ def get_call(
     )
 
 
+# ---- Click-to-call (dealer-bridge) ----------------------------------
+#
+# The AI voice agent (above) is for autonomous outbound. This is the
+# dealer-side click-to-call: rep clicks "Call seller", we ring the
+# rep's phone first, then bridge them to the seller. The seller's
+# caller ID shows the dealership's Twilio number, not the rep's
+# personal cell — keeps the rep's number off the seller's phone +
+# every conversation gets recorded for coaching / compliance.
+
+
+class BridgeCallIn(BaseModel):
+    lead_id: int
+    rep_phone: str  # rep's mobile, we call this first
+    record: bool = True
+
+
+class BridgeCallOut(BaseModel):
+    call_id: int
+    twilio_call_sid: str | None
+    status: str
+
+
+@router.post(
+    "/voice/bridge", response_model=BridgeCallOut, status_code=201
+)
+def start_bridge_call(
+    payload: BridgeCallIn,
+    dealer_id: DealerId,
+    db: Annotated[Session, Depends(get_session)],
+    request: Request,
+) -> BridgeCallOut:
+    """Initiate a dealer-bridge call: ring the rep first, then dial
+    the seller and connect both legs. Logged as a VoiceCall row with
+    direction="bridge" so the dashboard can distinguish AI calls from
+    human calls."""
+    lead = db.get(Lead, payload.lead_id)
+    if not lead or lead.dealer_id != dealer_id:
+        raise HTTPException(404, "lead not found")
+
+    listing = db.get(Listing, lead.listing_id)
+    seller_to = listing.seller_phone if listing else None
+    if not seller_to:
+        raise HTTPException(400, "no seller phone on lead's listing")
+
+    rep_to = (payload.rep_phone or "").strip()
+    if not rep_to:
+        raise HTTPException(400, "rep_phone required")
+
+    # TCPA gate — dealer-initiated calls still hit quiet hours + opt-outs.
+    listing_zip = listing.zip_code if listing else None
+    gate = check_send_allowed(
+        db, dealer_id=dealer_id, phone=seller_to, zip_code=listing_zip
+    )
+    if not gate.allowed:
+        raise HTTPException(
+            status_code=451,
+            detail=f"voice blocked: {gate.blocked_reason} — {gate.detail}",
+        )
+
+    call = VoiceCall(
+        lead_id=lead.id,
+        dealer_id=dealer_id,
+        to_number=seller_to,
+        from_number=rep_to,
+        direction="bridge",
+        status="queued",
+    )
+    db.add(call)
+    db.flush()
+
+    if not (
+        settings.twilio_account_sid
+        and settings.twilio_auth_token
+        and settings.twilio_from_number
+    ):
+        # Dev / unconfigured-Twilio path. Log a "simulated" row so the
+        # dashboard demo flow renders without billing.
+        call.status = "simulated"
+        return BridgeCallOut(
+            call_id=call.id, twilio_call_sid=None, status="simulated"
+        )
+
+    try:
+        from twilio.rest import Client  # type: ignore
+    except ImportError:
+        raise HTTPException(
+            500, "twilio python SDK not installed; run `uv add twilio`"
+        )
+
+    base = (settings.app_origin or "").rstrip("/") or _request_origin(request)
+    twiml_url = f"{base}/voice/twiml/bridge/{call.id}"
+    status_callback = f"{base}/voice/twiml/status/{call.id}"
+
+    client = Client(settings.twilio_account_sid, settings.twilio_auth_token)
+    try:
+        # Twilio rings rep_to first; when rep picks up, the URL we
+        # provide returns TwiML that bridges them to the seller.
+        twcall = client.calls.create(
+            to=rep_to,
+            from_=settings.twilio_from_number,
+            url=twiml_url,
+            method="POST",
+            status_callback=status_callback,
+            status_callback_method="POST",
+            status_callback_event=["completed"],
+            record=payload.record,
+        )
+    except Exception as e:  # noqa: BLE001
+        call.status = f"failed:{str(e)[:32]}"
+        raise HTTPException(502, f"twilio call create failed: {e}") from e
+
+    call.twilio_call_sid = twcall.sid
+    call.status = twcall.status or "queued"
+    return BridgeCallOut(
+        call_id=call.id, twilio_call_sid=twcall.sid, status=call.status
+    )
+
+
+@router.post("/voice/twiml/bridge/{call_id}")
+async def twiml_bridge(
+    call_id: int,
+    db: Annotated[Session, Depends(get_session)],
+    _verified: Annotated[None, Depends(verify_twilio_signature)],
+) -> Response:
+    """Twilio fetches this when the rep picks up. We <Dial> the
+    seller; Twilio bridges the two audio streams. The
+    callerId is our Twilio number so the seller never sees the
+    rep's mobile."""
+    call = db.get(VoiceCall, call_id)
+    if not call:
+        return _twiml('<Response><Hangup/></Response>')
+
+    seller = _xml_escape(call.to_number)
+    caller_id = _xml_escape(settings.twilio_from_number or call.to_number)
+    xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="Polly.Joanna">Connecting you to the seller now.</Say>
+  <Dial callerId="{caller_id}" timeout="25" record="record-from-answer">
+    <Number>{seller}</Number>
+  </Dial>
+</Response>"""
+    return _twiml(xml)
+
+
 @router.get("/leads/{lead_id}/voice-calls", response_model=list[VoiceCallOut])
 def list_calls_for_lead(
     lead_id: int,

@@ -134,6 +134,14 @@ PROTECTED_ENDPOINTS: list[tuple[str, str, dict | None]] = [
     ("POST", "/voice/calls", {"lead_id": 1}),
     ("GET", "/voice/calls/1", None),
     ("GET", "/leads/1/voice-calls", None),
+    # Click-to-call dealer bridge (rep-side). The TwiML endpoint at
+    # /voice/twiml/bridge/{call_id} is PUBLIC + signature-verified,
+    # NOT in this list.
+    (
+        "POST",
+        "/voice/bridge",
+        {"lead_id": 1, "rep_phone": "(813) 555-7777"},
+    ),
     # Offers (dealer-side; public token endpoints are intentionally NOT
     # in this list — they're the seller-facing surface and should work
     # without auth)
