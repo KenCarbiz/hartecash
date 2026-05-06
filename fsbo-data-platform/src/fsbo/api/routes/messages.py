@@ -356,6 +356,9 @@ async def twilio_inbound(
                 body=Body,
             )
         )
+        from fsbo.crm.response import mark_inbound_received
+
+        mark_inbound_received(lead)
         lead.updated_at = datetime.now(timezone.utc)
 
         # VAN-parity: when the seller tells us the car is sold or no
@@ -394,6 +397,9 @@ async def twilio_inbound(
                         actor="system",
                     )
                 )
+
+        # Persist last_inbound_at + status updates before returning.
+        db.flush()
 
     # Return empty TwiML so Twilio doesn't auto-reply.
     return "<Response></Response>"
@@ -497,6 +503,9 @@ async def inbound_email(
             body=(f"[{subject}] " if subject else "") + body_text,
         )
     )
+    from fsbo.crm.response import mark_inbound_received
+
+    mark_inbound_received(lead)
     lead.updated_at = datetime.now(timezone.utc)
 
     # Same intent ladder as inbound SMS — auto-close on sold /

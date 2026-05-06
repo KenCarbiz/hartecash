@@ -26,3 +26,20 @@ def mark_first_response(lead: Lead, when: datetime | None = None) -> bool:
         return False
     lead.first_responded_at = when or datetime.now(timezone.utc)
     return True
+
+
+def mark_inbound_received(lead: Lead, when: datetime | None = None) -> None:
+    """Bump lead.last_inbound_at on every inbound seller reply.
+
+    Drives the unread-thread indicator on /leads. Caller flushes."""
+    if lead is None:
+        return
+    lead.last_inbound_at = when or datetime.now(timezone.utc)
+
+
+def mark_inbound_seen(lead: Lead, when: datetime | None = None) -> None:
+    """Mark the inbound thread read. Sets last_seen_inbound_at to now
+    so last_inbound_at > last_seen_inbound_at flips back to false."""
+    if lead is None:
+        return
+    lead.last_seen_inbound_at = when or datetime.now(timezone.utc)

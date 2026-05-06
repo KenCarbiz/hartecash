@@ -631,6 +631,16 @@ class Lead(Base):
     first_responded_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), index=True
     )
+    # Inbound-reply tracking. last_inbound_at moves on every seller
+    # response (SMS / email). last_seen_inbound_at moves only when the
+    # rep marks the thread read. last_inbound_at > last_seen_inbound_at
+    # = unread, drives the bold-row indicator on /leads.
+    last_inbound_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), index=True
+    )
+    last_seen_inbound_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
 
 
 class Offer(Base):

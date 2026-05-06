@@ -10,6 +10,7 @@ import {
   formatPrice,
   formatRelativeDate,
   getCurrentUser,
+  isLeadUnread,
   listLeads,
   listTeammates,
 } from "@/lib/api";
@@ -72,6 +73,7 @@ export default async function LeadsPage({
 
   const teammates = await listTeammates().catch(() => []);
   const counts = countByStatus(leads);
+  const unreadCount = leads.filter((l) => isLeadUnread(l)).length;
 
   // Build CSV export link that preserves current filters.
   const exportParams = new URLSearchParams();
@@ -90,8 +92,10 @@ export default async function LeadsPage({
       <PageHeader
         title="Leads"
         subtitle={`${leads.length} in view${
-          effectiveAssignedTo ? ` · ${effectiveAssignedTo}` : ""
-        }`}
+          unreadCount > 0
+            ? ` · ${unreadCount} unread repl${unreadCount === 1 ? "y" : "ies"}`
+            : ""
+        }${effectiveAssignedTo ? ` · ${effectiveAssignedTo}` : ""}`}
         actions={
           <>
             <a
@@ -188,14 +192,27 @@ export default async function LeadsPage({
                   [l.listing_city, l.listing_state].filter(Boolean).join(", ") ||
                   l.listing_zip ||
                   "—";
+                const unread = isLeadUnread(l);
                 return (
-                  <tr key={l.id} className="hover:bg-ink-50">
+                  <tr
+                    key={l.id}
+                    className={`hover:bg-ink-50 ${unread ? "bg-amber-50/50" : ""}`}
+                  >
                     <td className="px-4 py-3">
                       <Link
                         href={`/listings/${l.listing_id}`}
-                        className="block font-medium text-ink-900 hover:text-brand-600"
+                        className="flex items-center gap-2 font-medium text-ink-900 hover:text-brand-600"
                       >
-                        {vehicle}
+                        {unread && (
+                          <span
+                            className="inline-block h-2 w-2 flex-none rounded-full bg-rose-500"
+                            title="New seller reply"
+                            aria-label="New seller reply"
+                          />
+                        )}
+                        <span className={unread ? "font-semibold" : ""}>
+                          {vehicle}
+                        </span>
                       </Link>
                       <p className="mt-0.5 text-xs text-ink-500">
                         {l.listing_source ?? "—"}

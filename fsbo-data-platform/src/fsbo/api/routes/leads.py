@@ -57,6 +57,8 @@ class LeadOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     first_responded_at: datetime | None = None
+    last_inbound_at: datetime | None = None
+    last_seen_inbound_at: datetime | None = None
 
 
 class LeadWithListing(LeadOut):
@@ -569,6 +571,8 @@ def list_leads(
             created_at=lead.created_at,
             updated_at=lead.updated_at,
             first_responded_at=lead.first_responded_at,
+            last_inbound_at=lead.last_inbound_at,
+            last_seen_inbound_at=lead.last_seen_inbound_at,
             listing_title=listing.title,
             listing_year=listing.year,
             listing_make=listing.make,
@@ -689,6 +693,8 @@ def list_stale_leads(
                 created_at=lead.created_at,
                 updated_at=lead.updated_at,
                 first_responded_at=lead.first_responded_at,
+                last_inbound_at=lead.last_inbound_at,
+                last_seen_inbound_at=lead.last_seen_inbound_at,
                 listing_title=listing.title,
                 listing_year=listing.year,
                 listing_make=listing.make,
@@ -726,6 +732,22 @@ def get_lead(
     db: Annotated[Session, Depends(get_session)],
 ) -> LeadOut:
     lead = _require_lead(db, lead_id, dealer_id)
+    return LeadOut.model_validate(lead)
+
+
+@router.post("/leads/{lead_id}/seen", response_model=LeadOut)
+def mark_lead_seen(
+    lead_id: int,
+    dealer_id: DealerId,
+    db: Annotated[Session, Depends(get_session)],
+) -> LeadOut:
+    """Mark the inbound thread on this lead read (clears the unread
+    badge). Idempotent — repeat calls just bump the timestamp."""
+    from fsbo.crm.response import mark_inbound_seen
+
+    lead = _require_lead(db, lead_id, dealer_id)
+    mark_inbound_seen(lead)
+    db.flush()
     return LeadOut.model_validate(lead)
 
 

@@ -445,6 +445,8 @@ export interface Lead {
   created_at: string;
   updated_at: string;
   first_responded_at: string | null;
+  last_inbound_at: string | null;
+  last_seen_inbound_at: string | null;
   // Present on inbox list endpoint (LeadWithListing); absent on single-lead lookup.
   listing_title?: string | null;
   listing_year?: number | null;
@@ -537,6 +539,18 @@ export async function patchLead(
   });
   if (!res.ok) throw new FsboApiError(`FSBO API ${res.status}`, res.status, await res.text());
   return (await res.json()) as Lead;
+}
+
+export async function markLeadSeen(leadId: number): Promise<Lead> {
+  const res = await apiFetch(`/leads/${leadId}/seen`, { method: "POST" });
+  if (!res.ok) throw new FsboApiError(`FSBO API ${res.status}`, res.status, await res.text());
+  return (await res.json()) as Lead;
+}
+
+export function isLeadUnread(lead: Pick<Lead, "last_inbound_at" | "last_seen_inbound_at">): boolean {
+  if (!lead.last_inbound_at) return false;
+  if (!lead.last_seen_inbound_at) return true;
+  return new Date(lead.last_inbound_at).getTime() > new Date(lead.last_seen_inbound_at).getTime();
 }
 
 export async function listInteractions(leadId: number): Promise<Interaction[]> {

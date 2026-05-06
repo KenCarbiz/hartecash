@@ -21,6 +21,8 @@ import {
   getCachedHistoryReport,
   getLeadFeed,
   getLeadForListing,
+  isLeadUnread,
+  markLeadSeen,
   getListing,
   getListingStats,
   getMarketEstimate,
@@ -87,6 +89,12 @@ export default async function ListingDetailPage({
     getLeadForListing(listingId).catch(() => null),
   ]);
   if (!listing) notFound();
+
+  // Visiting the listing detail page is implicit "I read the inbound
+  // thread" — clear the unread badge if there is one.
+  if (lead?.id && isLeadUnread(lead)) {
+    await markLeadSeen(lead.id).catch(() => null);
+  }
 
   const [
     interactions,
