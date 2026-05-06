@@ -526,6 +526,48 @@ class Lead(Base):
     )
     deleted_by: Mapped[str | None] = mapped_column(String(255))
     delete_reason: Mapped[str | None] = mapped_column(String(256))
+    # AI-extracted structured intake from voice + SMS conversations.
+    # Schema in fsbo.voice.intake.SellerIntake. Empty dict = nothing
+    # extracted yet. Updates accumulate (later calls overwrite missing
+    # fields, never erase known ones).
+    seller_intake: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+
+
+class VoiceCall(Base):
+    """One row per outbound voice call to a seller.
+
+    Twilio assigns a call_sid; we track it from initiation through
+    completion, accumulating speech turns + the final structured
+    extract. Multiple calls per lead are allowed (callbacks, retries).
+    """
+
+    __tablename__ = "voice_calls"
+    __table_args__ = (
+        Index("ix_voice_calls_lead_created", "lead_id", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    lead_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    dealer_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    twilio_call_sid: Mapped[str | None] = mapped_column(
+        String(64), unique=True, index=True
+    )
+    direction: Mapped[str] = mapped_column(String(16), default="outbound")
+    to_number: Mapped[str] = mapped_column(String(32), nullable=False)
+    from_number: Mapped[str | None] = mapped_column(String(32))
+    status: Mapped[str] = mapped_column(String(32), default="queued", nullable=False)
+    # Each turn is {"role": "ai"|"seller", "text": "...", "at": iso8601}.
+    # Stored as a JSON list so we can rebuild the conversation for the
+    # extractor without a separate VoiceTurn table.
+    turns: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    intake: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    duration_seconds: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
 
 
 class Interaction(Base):

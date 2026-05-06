@@ -20,6 +20,7 @@ from fsbo.api.routes import (
     tcpa,
     templates,
     valuation,
+    voice,
     webhooks,
 )
 from fsbo.config import settings
@@ -75,6 +76,7 @@ app.include_router(notifications.router)
 app.include_router(analytics.router)
 app.include_router(billing.router)
 app.include_router(tcpa.router)
+app.include_router(voice.router)
 
 
 @app.get("/health")
