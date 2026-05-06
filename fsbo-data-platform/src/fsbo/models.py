@@ -115,6 +115,16 @@ class Listing(Base):
     # dict means "not yet assessed" (assessment may run async after
     # ingest).
     condition: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    # Cached vehicle-history report (CARFAX / AutoCheck / NMVTIS).
+    # Schema in fsbo.history.types.HistoryReport. Empty dict = not
+    # fetched yet. Refreshed on demand via the /listings/{id}/history
+    # endpoint; cache key is VIN, so re-fetching is cheap.
+    history_report: Mapped[dict] = mapped_column(
+        JSON, default=dict, nullable=False
+    )
+    history_report_fetched_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
 
     city: Mapped[str | None] = mapped_column(String(128))
     state: Mapped[str | None] = mapped_column(String(8))

@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -162,6 +163,50 @@ def get_listing(
     if not row:
         raise HTTPException(status_code=404, detail="listing not found")
     return ListingOut.model_validate(row)
+
+
+@router.post("/{listing_id}/history/refresh")
+async def refresh_history_report(
+    listing_id: int,
+    dealer_id: DealerId,
+    db: Annotated[Session, Depends(get_session)],
+) -> dict:
+    """Pull (or re-pull) a vehicle-history report from the configured
+    provider cascade and cache it on the listing row.
+
+    No-op when the listing has no VIN. When no provider is configured,
+    returns a 503-ish status in the body so the dashboard can render a
+    "wire up CARFAX / AutoCheck / NMVTIS" hint instead of a hard error.
+    """
+    _ = dealer_id  # auth-only; corpus is shared across dealers
+    from fsbo.history.providers import resolve_history
+
+    row = db.get(Listing, listing_id)
+    if not row:
+        raise HTTPException(404, "listing not found")
+    if not row.vin or len(row.vin) != 17:
+        raise HTTPException(400, "listing has no 17-character VIN to query")
+
+    report = await resolve_history(row.vin)
+    row.history_report = report.as_dict()
+    row.history_report_fetched_at = datetime.now(timezone.utc)
+    db.flush()
+    return report.as_dict()
+
+
+@router.get("/{listing_id}/history")
+def get_cached_history_report(
+    listing_id: int,
+    dealer_id: DealerId,
+    db: Annotated[Session, Depends(get_session)],
+) -> dict:
+    """Return whatever's cached. Empty dict when nothing's been
+    fetched yet — call /history/refresh to populate."""
+    _ = dealer_id
+    row = db.get(Listing, listing_id)
+    if not row:
+        raise HTTPException(404, "listing not found")
+    return dict(row.history_report or {})
 
 
 @router.patch("/{listing_id}/facts", response_model=ListingOut)

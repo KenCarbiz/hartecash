@@ -56,6 +56,21 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     smtp_use_tls: bool = True
 
+    # ---- Vehicle history reports --------------------------------------
+    # Each provider is independently togglable via env. Empty = disabled
+    # (the listing endpoint returns a "configure provider" status). We
+    # don't ship signed agreements with any of these as code; ops opens
+    # the account, drops the API key, and the integration goes live.
+    carfax_api_key: str = ""
+    carfax_account_id: str = ""
+    autocheck_api_key: str = ""
+    autocheck_account_id: str = ""
+    nmvtis_api_key: str = ""
+    # Provider preference order — we cascade: try the first provider that
+    # has a key configured, fall back to the next if it errors. Override
+    # via VEHICLE_HISTORY_PROVIDERS=carfax,autocheck,nmvtis.
+    vehicle_history_providers: str = "carfax,autocheck,nmvtis"
+
     # ---- Stripe billing -----------------------------------------------
     # Empty values disable billing entirely (dev / CI). Webhook secret
     # MUST be set in production for /webhooks/stripe to do anything.

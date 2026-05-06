@@ -1054,3 +1054,51 @@ export async function getVoiceCall(callId: number): Promise<VoiceCall | null> {
   if (!res.ok) return null;
   return (await res.json()) as VoiceCall;
 }
+
+// ---------- vehicle history ----------
+
+export interface HistoryEvent {
+  kind: string;
+  when: string;
+  location: string | null;
+  description: string;
+}
+
+export interface HistoryReport {
+  vin: string | null;
+  source: string; // "carfax" | "autocheck" | "nmvtis" | "none" | "stub"
+  fetched_at: string;
+  title_brand: string;
+  accident_count: number | null;
+  open_recall_count: number | null;
+  owner_count: number | null;
+  service_record_count: number | null;
+  last_reported_mileage: number | null;
+  last_reported_mileage_date: string | null;
+  use_type: string | null;
+  events: HistoryEvent[];
+  full_report_url: string | null;
+  status: string;
+  error_detail: string | null;
+}
+
+export async function getCachedHistoryReport(
+  listingId: number,
+): Promise<HistoryReport | null> {
+  const res = await apiFetch(`/listings/${listingId}/history`);
+  if (!res.ok) return null;
+  const body = (await res.json()) as Record<string, unknown>;
+  return Object.keys(body).length > 0 ? (body as unknown as HistoryReport) : null;
+}
+
+export async function refreshHistoryReport(
+  listingId: number,
+): Promise<HistoryReport> {
+  const res = await apiFetch(`/listings/${listingId}/history/refresh`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    throw new FsboApiError(`FSBO API ${res.status}`, res.status, await res.text());
+  }
+  return (await res.json()) as HistoryReport;
+}

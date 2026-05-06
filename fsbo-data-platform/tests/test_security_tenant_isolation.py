@@ -62,6 +62,8 @@ PROTECTED_ENDPOINTS: list[tuple[str, str, dict | None]] = [
     ("GET", "/listings", None),
     ("GET", "/listings/1", None),
     ("PATCH", "/listings/1/facts", {"color": "Red"}),
+    ("POST", "/listings/1/history/refresh", None),
+    ("GET", "/listings/1/history", None),
     ("GET", "/listings/1/duplicates", None),
     ("GET", "/listings/1/stats", None),
     ("GET", "/listings/1/vehicle-file", None),

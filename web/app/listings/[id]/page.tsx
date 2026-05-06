@@ -6,6 +6,7 @@ import { LeadPanel } from "@/components/LeadPanel";
 import { ListingTimeline } from "@/components/ListingTimeline";
 import { MarketBadge } from "@/components/MarketBadge";
 import { ConditionPanel } from "@/components/ConditionPanel";
+import { HistoryReportPanel } from "@/components/HistoryReportPanel";
 import { PlateChip, VehicleFactsEditor } from "@/components/VehicleFactsEditor";
 import { QualityPanel } from "@/components/QualityPanel";
 import { UnifiedFeedPanel } from "@/components/UnifiedFeedPanel";
@@ -15,6 +16,7 @@ import {
   formatMileage,
   formatPrice,
   formatRelativeDate,
+  getCachedHistoryReport,
   getLeadFeed,
   getLeadForListing,
   getListing,
@@ -92,6 +94,7 @@ export default async function ListingDetailPage({
     stats,
     feed,
     voiceCalls,
+    historyReport,
   ] = await Promise.all([
     lead ? listInteractions(lead.id).catch(() => []) : Promise.resolve([]),
     listTemplates().catch(() => []),
@@ -101,6 +104,7 @@ export default async function ListingDetailPage({
     getListingStats(listingId).catch(() => null),
     lead ? getLeadFeed(lead.id).catch(() => []) : Promise.resolve([]),
     lead ? listVoiceCalls(lead.id).catch(() => []) : Promise.resolve([]),
+    getCachedHistoryReport(listingId).catch(() => null),
   ]);
 
   const vehicleLine = [listing.year, listing.make, listing.model, listing.trim]
@@ -313,6 +317,11 @@ export default async function ListingDetailPage({
         <div className="lg:col-span-1 space-y-3">
           <QualityPanel listing={listing} />
           <ConditionPanel condition={listing.condition} />
+          <HistoryReportPanel
+            listingId={listing.id}
+            hasVin={!!listing.vin && listing.vin.length === 17}
+            report={historyReport}
+          />
           <MarketBadge estimate={market} />
           <ListingTimeline stats={stats} />
           <h2 className="text-sm font-semibold text-ink-700 pt-1">Lead workspace</h2>
