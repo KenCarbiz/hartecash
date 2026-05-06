@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from fsbo.auth.resolver import DealerId
 from fsbo.db import get_session
+from fsbo.messaging.intent import classify_inbound
 from fsbo.messaging.tcpa import (
     check_send_allowed,
     is_stop_keyword,
@@ -235,6 +236,43 @@ async def twilio_inbound(
             )
         )
         lead.updated_at = datetime.now(timezone.utc)
+
+        # VAN-parity: when the seller tells us the car is sold or no
+        # longer available, auto-mark the listing + close the lead so
+        # we stop chasing it. Don't auto-close on "negative" (could be
+        # a wrong number we can correct) or "interested" (obvious).
+        intent = classify_inbound(Body)
+        if intent.intent == "sold":
+            listing = db.get(Listing, lead.listing_id)
+            if listing and listing.sold_at is None:
+                listing.sold_at = datetime.now(timezone.utc)
+                listing.sold_signal = (Body or "")[:256]
+                listing.auto_hidden = True
+                listing.auto_hide_reason = (
+                    listing.auto_hide_reason or "seller confirmed sold via SMS"
+                )
+                db.flush()
+            if lead.status not in ("purchased", "lost"):
+                lead.status = "lost"
+                db.add(
+                    Interaction(
+                        lead_id=lead.id,
+                        kind=InteractionKind.STATUS_CHANGE.value,
+                        body=f"auto-closed: seller confirmed sold ({(Body or '').strip()[:80]})",
+                        actor="system",
+                    )
+                )
+        elif intent.intent == "not_for_sale":
+            if lead.status not in ("purchased", "lost"):
+                lead.status = "lost"
+                db.add(
+                    Interaction(
+                        lead_id=lead.id,
+                        kind=InteractionKind.STATUS_CHANGE.value,
+                        body=f"auto-closed: seller withdrew listing ({(Body or '').strip()[:80]})",
+                        actor="system",
+                    )
+                )
 
     # Return empty TwiML so Twilio doesn't auto-reply.
     return "<Response></Response>"

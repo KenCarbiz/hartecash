@@ -49,7 +49,7 @@ def list_listings(
         description="Filter by classification. Pass empty string to disable.",
     ),
     min_score: int | None = Query(None, ge=0, le=100),
-    sort: str = Query("posted_at", pattern="^(posted_at|score|price)$"),
+    sort: str = Query("posted_at", pattern="^(posted_at|score|price|distance)$"),
     show_hidden: bool = Query(
         False,
         description="Include auto-hidden listings (hard-rejected scams, curbstoners, branded titles).",
@@ -106,31 +106,37 @@ def list_listings(
     else:
         order_by = [Listing.posted_at.desc().nulls_last(), Listing.id.desc()]
 
-    # Radius search: if near_zip + radius_miles set, geocode the center and
-    # distance-filter in-memory after fetching a bounded candidate set.
+    # Geocode-based modes (radius search OR sort=distance) need a center
+    # ZIP. Both fetch a bounded candidate set, distance-filter / sort in
+    # Python, then offset+limit on the result. Without near_zip, sort=
+    # distance falls back to posted_at order.
     center: GeoPoint | None = None
-    if near_zip and radius_miles:
+    if near_zip:
         center = geocode(near_zip)
 
-    if center:
+    use_geo = bool(center) and (radius_miles is not None or sort == "distance")
+
+    if use_geo:
         # Pull every candidate that matches the SQL filters (no offset/limit
         # yet), distance-filter in Python, then paginate over the filtered
-        # set. The previous implementation applied offset to the pre-filter
-        # window, which both broke `total` (only counted within the window)
-        # and broke pagination (offset 50 skipped 50 unfiltered rows, not
-        # 50 rows-within-radius). Cap candidates to keep this affordable
-        # at corpus scale; ZIP+state filters keep the effective set small.
+        # set. Cap candidates to keep this affordable at corpus scale;
+        # ZIP+state filters keep the effective set small.
         CANDIDATE_CAP = 5000
         candidates = list(
             db.scalars(stmt.order_by(*order_by).limit(CANDIDATE_CAP)).all()
         )
-        filtered = []
+        scored: list[tuple[float, "Listing"]] = []
         for r in candidates:
             rp = geocode(r.zip_code) if r.zip_code else None
             if rp is None:
                 continue
-            if haversine_miles(center, rp) <= radius_miles:
-                filtered.append(r)
+            d = haversine_miles(center, rp)
+            if radius_miles is not None and d > radius_miles:
+                continue
+            scored.append((d, r))
+        if sort == "distance":
+            scored.sort(key=lambda t: t[0])
+        filtered = [r for _, r in scored]
         total = len(filtered)
         rows = filtered[offset : offset + limit]
     else:

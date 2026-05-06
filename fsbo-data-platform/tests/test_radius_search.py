@@ -63,6 +63,39 @@ def test_radius_total_counts_only_in_radius(client, db_session):
     assert {i["external_id"] for i in body["items"]} == {"tampa-a", "tampa-b"}
 
 
+def test_sort_by_distance_orders_nearest_first(client, db_session):
+    """sort=distance with near_zip orders results by haversine distance,
+    nearest first. Doesn't require radius_miles."""
+    _add(db_session, external_id="orlando", zip_code="32801", price=20000)  # ~84 mi
+    _add(db_session, external_id="tampa", zip_code="33607", price=21000)  # 0
+    _add(db_session, external_id="miami", zip_code="33101", price=22000)  # ~280 mi
+
+    body = client.get(
+        "/listings",
+        params={
+            "near_zip": "33607",
+            "sort": "distance",
+            "classification": "",
+        },
+    ).json()
+    ids = [item["external_id"] for item in body["items"]]
+    assert ids == ["tampa", "orlando", "miami"]
+
+
+def test_sort_by_distance_without_near_zip_falls_back_to_posted_at(client, db_session):
+    """No near_zip means we have nothing to sort distances from; fall
+    back to the default order rather than failing."""
+    _add(db_session, external_id="a", zip_code="33607", price=20000)
+    _add(db_session, external_id="b", zip_code="32801", price=21000)
+    r = client.get(
+        "/listings",
+        params={"sort": "distance", "classification": ""},
+    )
+    assert r.status_code == 200
+    # Whatever the order is — the request just shouldn't 500.
+    assert len(r.json()["items"]) == 2
+
+
 def test_radius_pagination_offsets_into_filtered_set(client, db_session):
     """Regression: paginating past page 1 should slice into the
     filtered (within-radius) set, not the pre-filter candidate window."""

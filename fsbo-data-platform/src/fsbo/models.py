@@ -99,6 +99,13 @@ class Listing(Base):
     color: Mapped[str | None] = mapped_column(String(32))
     # True = runs/drives, False = won't run (parts/project car), None = unknown.
     drivable: Mapped[bool | None] = mapped_column(Boolean)
+    # Sold signal: when the seller explicitly tells us via SMS/voice/etc
+    # that the vehicle has been sold to someone else, we stamp the time
+    # and the verbatim quote. Auto-hides the listing from feeds.
+    sold_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), index=True
+    )
+    sold_signal: Mapped[str | None] = mapped_column(String(256))
     # Storage keys (relative paths under FSBO_MEDIA_ROOT) for photos we
     # mirrored from sources whose URLs expire (FB CDN). Served via the
     # /listings/{id}/image/{idx} proxy. Empty list = nothing mirrored.

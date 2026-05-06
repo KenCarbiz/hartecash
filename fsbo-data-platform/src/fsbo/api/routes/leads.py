@@ -511,6 +511,101 @@ def list_interactions(
     return [InteractionOut.model_validate(r) for r in rows]
 
 
+# ---------- unified inbox feed --------------------------------------------
+#
+# VAN's "unified messaging hub" stream combines calls, SMS, email, web
+# forms, and in-platform notes into one feed per conversation. We have
+# the same data — Interactions + Messages tables — but no merged read
+# endpoint until now. This produces a single chronological feed the
+# dashboard can render as one timeline.
+
+
+class FeedEntry(BaseModel):
+    """One entry in the unified per-lead feed.
+
+    `kind` mirrors the source row type:
+      - "interaction:<InteractionKind>" — note / call / text / email /
+        task / status_change. body is free text.
+      - "message:outbound" / "message:inbound" — Twilio SMS row. body
+        is the SMS text. delivery_status is the Twilio status.
+    """
+
+    kind: str
+    direction: str | None = None
+    body: str | None = None
+    actor: str | None = None
+    delivery_status: str | None = None
+    created_at: datetime
+    # Reference back to the source row for quick navigation.
+    source_id: int
+    source_table: str  # "interactions" | "messages"
+
+
+class UnifiedFeed(BaseModel):
+    lead_id: int
+    entries: list[FeedEntry]
+
+
+@router.get("/leads/{lead_id}/feed", response_model=UnifiedFeed)
+def lead_feed(
+    lead_id: int,
+    dealer_id: DealerId,
+    db: Annotated[Session, Depends(get_session)],
+    limit: int = 200,
+) -> UnifiedFeed:
+    """Chronological merge of every Interaction + Message tied to a
+    lead. Newest first. Single endpoint -> single timeline -> dealer
+    sees the whole conversation in one panel rather than tabbing
+    between SMS and notes."""
+    lead = _require_lead(db, lead_id, dealer_id)
+
+    interactions = db.scalars(
+        select(Interaction)
+        .where(Interaction.lead_id == lead.id)
+        .order_by(Interaction.created_at.desc())
+    ).all()
+
+    from fsbo.models import Message  # local import — avoid circulars
+
+    messages = db.scalars(
+        select(Message)
+        .where(Message.lead_id == lead.id)
+        .order_by(Message.created_at.desc())
+    ).all()
+
+    entries: list[FeedEntry] = []
+    for i in interactions:
+        entries.append(
+            FeedEntry(
+                kind=f"interaction:{i.kind}",
+                direction=i.direction,
+                body=i.body,
+                actor=i.actor,
+                created_at=i.created_at,
+                source_id=i.id,
+                source_table="interactions",
+            )
+        )
+    for m in messages:
+        entries.append(
+            FeedEntry(
+                kind=f"message:{m.direction}",
+                direction=m.direction,
+                body=m.body,
+                actor=None,
+                delivery_status=m.status,
+                created_at=m.created_at,
+                source_id=m.id,
+                source_table="messages",
+            )
+        )
+
+    # Sort newest-first and cap.
+    entries.sort(key=lambda e: e.created_at, reverse=True)
+    entries = entries[: min(limit, 1000)]
+    return UnifiedFeed(lead_id=lead.id, entries=entries)
+
+
 @router.post(
     "/leads/{lead_id}/interactions/{interaction_id}/complete",
     response_model=InteractionOut,
