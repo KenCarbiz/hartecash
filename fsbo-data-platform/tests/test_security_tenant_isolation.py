@@ -135,6 +135,8 @@ PROTECTED_ENDPOINTS: list[tuple[str, str, dict | None]] = [
     ("GET", "/voice/calls/1", None),
     ("GET", "/leads/1/voice-calls", None),
     ("GET", "/leads/stale", None),
+    # First-run onboarding checklist
+    ("GET", "/onboarding/checklist", None),
     # Click-to-call dealer bridge (rep-side). The TwiML endpoint at
     # /voice/twiml/bridge/{call_id} is PUBLIC + signature-verified,
     # NOT in this list.
