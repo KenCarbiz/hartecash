@@ -10,6 +10,11 @@ from sqlalchemy.orm import Session
 
 from fsbo.auth.resolver import DealerId
 from fsbo.db import get_session
+from fsbo.messaging.tcpa import (
+    check_send_allowed,
+    is_stop_keyword,
+    record_opt_out,
+)
 from fsbo.messaging.twilio_client import send_sms
 from fsbo.messaging.twilio_signature import verify_twilio_signature
 from fsbo.models import Interaction, InteractionKind, Lead, Listing, Message
@@ -56,12 +61,35 @@ async def send(
     if not lead or lead.dealer_id != dealer_id:
         raise HTTPException(404, "lead not found")
 
+    listing = db.get(Listing, lead.listing_id)
     to = payload.to_number
     if not to:
-        listing = db.get(Listing, lead.listing_id)
         to = listing.seller_phone if listing else None
     if not to:
         raise HTTPException(400, "no destination number on lead's listing")
+
+    # TCPA gate: block sends that violate quiet hours, opt-outs, or
+    # (when strict-consent mode is enabled) lack a consent record. We
+    # log a refused-send Interaction so the audit trail captures the
+    # block. Returning 451 (Unavailable for Legal Reasons) lets the
+    # dashboard surface the reason without a generic 4xx.
+    listing_zip = listing.zip_code if listing else None
+    gate = check_send_allowed(
+        db, dealer_id=dealer_id, phone=to, zip_code=listing_zip
+    )
+    if not gate.allowed:
+        db.add(
+            Interaction(
+                lead_id=lead.id,
+                kind=InteractionKind.NOTE.value,
+                body=f"sms blocked: {gate.blocked_reason} ({gate.detail})",
+                actor=dealer_id,
+            )
+        )
+        raise HTTPException(
+            status_code=451,
+            detail=f"sms blocked: {gate.blocked_reason} — {gate.detail}",
+        )
 
     result = await send_sms(to_number=to, body=payload.body)
 
@@ -179,6 +207,25 @@ async def twilio_inbound(
                 twilio_sid=MessageSid,
             )
         )
+        # TCPA: STOP / END / QUIT / UNSUBSCRIBE → immediate opt-out.
+        # Per CTIA we have to honor within 24 hours; we honor instantly
+        # and log a status_change interaction with the verbatim text.
+        if is_stop_keyword(Body):
+            record_opt_out(
+                db,
+                dealer_id=lead.dealer_id,
+                phone=From,
+                source="stop_keyword",
+                note=(Body or "")[:128],
+            )
+            db.add(
+                Interaction(
+                    lead_id=lead.id,
+                    kind=InteractionKind.STATUS_CHANGE.value,
+                    body=f"opted out via STOP keyword: {(Body or '').strip()[:80]}",
+                    actor="system",
+                )
+            )
         db.add(
             Interaction(
                 lead_id=lead.id,

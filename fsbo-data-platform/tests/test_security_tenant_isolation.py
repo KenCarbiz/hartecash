@@ -110,6 +110,11 @@ PROTECTED_ENDPOINTS: list[tuple[str, str, dict | None]] = [
     ),
     ("GET", "/billing/subscription", None),
     ("POST", "/billing/portal?return_url=https://example.com/", None),
+    # TCPA opt-out registry + consent ledger (dealer-scoped)
+    ("POST", "/tcpa/opt-outs", {"phone": "8135551234"}),
+    ("GET", "/tcpa/opt-outs", None),
+    ("POST", "/tcpa/consents", {"phone": "8135551234", "consent_text": "yes"}),
+    ("GET", "/tcpa/consents", None),
     # Admin
     ("POST", "/admin/rescore", None),
 ]

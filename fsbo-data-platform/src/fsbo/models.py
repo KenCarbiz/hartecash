@@ -607,6 +607,61 @@ class DailyActivity(Base):
     goal_messages: Mapped[int] = mapped_column(Integer, default=60, nullable=False)
 
 
+class SmsOptOut(Base):
+    """A phone number that has opted out of SMS contact, plus when +
+    why. Federal TCPA + state mini-TCPA require honoring STOP within
+    24 hours; we honor immediately and audit. One row per
+    (dealer_id, phone) so a number can opt out of one dealership but
+    not another (rare; mostly we treat opt-out as global per number,
+    but the dealer-scope leaves room for compliance carve-outs).
+    """
+
+    __tablename__ = "sms_opt_outs"
+    __table_args__ = (
+        UniqueConstraint("dealer_id", "phone", name="uq_optout_dealer_phone"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    dealer_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    phone: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    source: Mapped[str] = mapped_column(String(32), nullable=False)
+    # ^ "stop_keyword" | "manual" | "carrier_unsubscribed" | "regulatory"
+    note: Mapped[str | None] = mapped_column(String(256))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class SmsConsent(Base):
+    """Affirmative consent record. The dealer captures a yes/no
+    response from the seller before the FIRST outbound SMS; the
+    timestamp + the verbatim consent language proves we had standing
+    consent at the time of the send. Supports class-action defense.
+    """
+
+    __tablename__ = "sms_consents"
+    __table_args__ = (
+        UniqueConstraint(
+            "dealer_id", "phone", name="uq_consent_dealer_phone"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    dealer_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    phone: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    # The exact text the seller saw / agreed to. Stored verbatim, not
+    # template-keyed, because the legal artifact is the wording at the
+    # moment of consent.
+    consent_text: Mapped[str] = mapped_column(Text, nullable=False)
+    captured_via: Mapped[str] = mapped_column(String(32), nullable=False)
+    # ^ "double_opt_in_sms" | "web_form" | "in_person" | "marketplace_dm"
+    captured_by_user: Mapped[str | None] = mapped_column(String(255))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class WebhookDelivery(Base):
     __tablename__ = "webhook_deliveries"
     __table_args__ = (Index("ix_webhook_deliveries_status", "status", "next_attempt_at"),)

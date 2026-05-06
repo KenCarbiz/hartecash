@@ -32,6 +32,21 @@ def db_session():
         engine.dispose()
 
 
+@pytest.fixture(autouse=True)
+def _disable_tcpa_quiet_hours(monkeypatch):
+    """Default the TCPA quiet-hours gate to allow during tests.
+
+    The gate is real in production (8 AM - 8 PM local). Patching it
+    here keeps every existing test from caring about CI's wall clock.
+    Tests that specifically exercise quiet-hours (test_tcpa.py) call
+    in_quiet_hours() directly with an explicit `when=` argument and
+    bypass this monkeypatch entirely.
+    """
+    import fsbo.messaging.tcpa as tcpa_module
+
+    monkeypatch.setattr(tcpa_module, "in_quiet_hours", lambda *a, **kw: False)
+
+
 @pytest.fixture
 def client(db_session):
     def _override():
