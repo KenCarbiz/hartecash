@@ -113,20 +113,26 @@ def list_listings(
         center = geocode(near_zip)
 
     if center:
-        # Pull a larger window so we have enough candidates to filter.
-        window = max(limit * 5, 200)
-        rows = list(
-            db.scalars(stmt.order_by(*order_by).limit(window).offset(offset)).all()
+        # Pull every candidate that matches the SQL filters (no offset/limit
+        # yet), distance-filter in Python, then paginate over the filtered
+        # set. The previous implementation applied offset to the pre-filter
+        # window, which both broke `total` (only counted within the window)
+        # and broke pagination (offset 50 skipped 50 unfiltered rows, not
+        # 50 rows-within-radius). Cap candidates to keep this affordable
+        # at corpus scale; ZIP+state filters keep the effective set small.
+        CANDIDATE_CAP = 5000
+        candidates = list(
+            db.scalars(stmt.order_by(*order_by).limit(CANDIDATE_CAP)).all()
         )
         filtered = []
-        for r in rows:
+        for r in candidates:
             rp = geocode(r.zip_code) if r.zip_code else None
             if rp is None:
                 continue
             if haversine_miles(center, rp) <= radius_miles:
                 filtered.append(r)
         total = len(filtered)
-        rows = filtered[:limit]
+        rows = filtered[offset : offset + limit]
     else:
         total = db.scalar(count_stmt) or 0
         rows = db.scalars(stmt.order_by(*order_by).limit(limit).offset(offset)).all()

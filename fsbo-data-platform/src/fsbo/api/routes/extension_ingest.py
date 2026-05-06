@@ -120,6 +120,106 @@ class ListingStats(BaseModel):
     price_history: list[PriceHistoryRow]
 
 
+class SellerPhoneIn(BaseModel):
+    """Phone number the dealer captured by messaging the seller through
+    Facebook Messenger. Either listing_id (when the dealer already
+    claimed the lead) or external_id+source must be set.
+    """
+
+    listing_id: int | None = None
+    external_id: str | None = None
+    source: str = "facebook_marketplace"
+    phone: str  # raw, will be normalized to digits-only on the server
+    context: str | None = None  # short snippet of the message it came from
+
+
+class SellerPhoneOut(BaseModel):
+    listing_id: int
+    seller_phone: str
+    overwritten: bool
+
+
+def _digits_only(phone: str) -> str:
+    return "".join(c for c in phone if c.isdigit())
+
+
+def _looks_like_us_phone(phone: str) -> bool:
+    d = _digits_only(phone)
+    # 10 digits, OR 11 digits leading with 1
+    if len(d) == 10:
+        return True
+    if len(d) == 11 and d[0] == "1":
+        return True
+    return False
+
+
+@router.post("/sources/extension/seller-phone", response_model=SellerPhoneOut)
+def record_seller_phone(
+    payload: SellerPhoneIn,
+    dealer_id: DealerId,
+    db: Annotated[Session, Depends(get_session)],
+) -> SellerPhoneOut:
+    """Persist a seller phone observed in a Messenger thread.
+
+    Resolves the listing by id or by (source, external_id). If the
+    listing already has a phone, only overwrites when this one is
+    strictly more useful (none -> set, partial -> 10-digit). Always
+    records the observation in `raw.phone_observations` so the seller
+    graph can later mine it for curbstoner clusters.
+    """
+    _ = dealer_id
+
+    if not _looks_like_us_phone(payload.phone):
+        raise HTTPException(400, "phone does not look like a US number")
+
+    digits = _digits_only(payload.phone)
+    canonical = digits[-10:]  # store last 10 digits, drop country code
+
+    if payload.listing_id is not None:
+        row = db.get(Listing, payload.listing_id)
+    elif payload.external_id:
+        row = db.scalar(
+            select(Listing).where(
+                Listing.source == payload.source,
+                Listing.external_id == payload.external_id,
+            )
+        )
+    else:
+        raise HTTPException(400, "listing_id or external_id required")
+    if not row:
+        raise HTTPException(404, "listing not found")
+
+    # Append to the observation log first so we keep the trail even if
+    # the canonical phone field is already set.
+    raw = dict(row.raw or {})
+    obs = list(raw.get("phone_observations") or [])
+    obs.append(
+        {
+            "phone": canonical,
+            "context": (payload.context or "")[:200],
+            "observed_at": datetime.now(timezone.utc).isoformat(),
+        }
+    )
+    # Cap to most recent 10 observations to bound row size.
+    raw["phone_observations"] = obs[-10:]
+    row.raw = raw
+
+    overwritten = False
+    if not row.seller_phone:
+        row.seller_phone = canonical
+    elif _digits_only(row.seller_phone) != canonical:
+        # Existing phone differs — stash but don't overwrite. Operator
+        # can review observations.
+        overwritten = False
+    db.flush()
+
+    return SellerPhoneOut(
+        listing_id=row.id,
+        seller_phone=row.seller_phone or canonical,
+        overwritten=overwritten,
+    )
+
+
 def _schedule_mirror(listing_id: int, image_urls: list[str]) -> None:
     """Background-task body: mirror any FB-CDN URLs and store the keys
     on the Listing row. Runs in a fresh DB session because the request

@@ -81,6 +81,21 @@ async function handle(msg: WorkerMessage): Promise<WorkerResponse> {
         });
         return { ok: true, data };
       }
+      case "sellerPhone": {
+        // No external_id == we don't know which listing this thread is
+        // about. Don't fire blind — backend would 404 anyway.
+        if (!msg.external_id) return { ok: false, error: "no listing context" };
+        const data = await apiFetch("/sources/extension/seller-phone", {
+          method: "POST",
+          body: JSON.stringify({
+            external_id: msg.external_id,
+            source: msg.source,
+            phone: msg.phone,
+            context: msg.context,
+          }),
+        }).catch(() => undefined);
+        return { ok: true, data };
+      }
       case "telemetry": {
         // Fire-and-forget; we don't want telemetry failures to spam the
         // user's console or block the content script. 204 = no body.

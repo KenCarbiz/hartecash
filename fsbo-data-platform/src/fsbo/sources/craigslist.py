@@ -72,13 +72,42 @@ class CraigslistSource(Source):
         await throttle("craigslist")
         resp = await self._client.get(url, params=params)
         resp.raise_for_status()
+
+        # Detect "we got served an HTML CAPTCHA / bot page" before handing
+        # the body to feedparser, which is so lenient it'll happily extract
+        # nonsense entries from arbitrary HTML. RSS responses always start
+        # with an <?xml prolog or an <rss/<feed root.
+        head = resp.text.lstrip()[:200].lower()
+        looks_like_rss = head.startswith("<?xml") or head.startswith("<rss") or "<rss " in head
+        if not looks_like_rss:
+            raise RuntimeError(
+                f"craigslist RSS unparseable for city={city}: "
+                f"non-RSS response (probably bot detector / CAPTCHA)"
+            )
+
         feed = feedparser.parse(resp.text)
 
+        total = len(feed.entries)
+        parse_fail = 0
         for entry in feed.entries:
             try:
                 yield self._parse_entry(entry, city)
             except Exception as e:  # one bad entry shouldn't kill the run
-                log.warning("craigslist.parse_error", error=str(e), entry_id=entry.get("id"))
+                parse_fail += 1
+                log.warning(
+                    "craigslist.parse_error",
+                    error=str(e),
+                    entry_id=entry.get("id"),
+                )
+
+        # Hard signal of breakage: feed had entries but every single one
+        # failed to parse. Raising here surfaces in poll.py as
+        # ScrapeRun.error and shows up in the source-health dashboard.
+        if total > 0 and parse_fail == total:
+            raise RuntimeError(
+                f"craigslist RSS schema appears broken for city={city}: "
+                f"{total} entries, 0 parsed, {parse_fail} failed"
+            )
 
     def _parse_entry(self, entry: Any, city: str) -> NormalizedListing:
         link: str = entry.get("link") or entry.get("id", "")

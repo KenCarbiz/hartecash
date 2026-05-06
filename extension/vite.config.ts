@@ -59,6 +59,7 @@ export default defineConfig({
         background: resolve(__dirname, "src/background/index.ts"),
         "content-facebook": resolve(__dirname, "src/content/facebook.ts"),
         "content-craigslist": resolve(__dirname, "src/content/craigslist.ts"),
+        "content-messenger": resolve(__dirname, "src/content/messenger.ts"),
       },
       output: {
         entryFileNames: "[name].js",

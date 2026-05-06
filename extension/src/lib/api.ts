@@ -59,6 +59,13 @@ export type WorkerMessage =
   | { kind: "lookupByUrl"; url: string }
   | { kind: "claimLead"; listingId: number }
   | {
+      kind: "sellerPhone";
+      phone: string;  // 10 digits
+      context: string;
+      external_id: string | null;
+      source: "facebook_marketplace";
+    }
+  | {
       kind: "telemetry";
       event:
         | "graphql_walker_empty"

@@ -64,6 +64,16 @@ class Listing(Base):
         Index("ix_listings_vehicle", "make", "model", "year"),
         Index("ix_listings_classification", "classification"),
         Index("ix_listings_posted_at", "posted_at"),
+        # Default /listings query is "classification = private_seller AND
+        # NOT auto_hidden ORDER BY posted_at DESC". A composite index on
+        # the leading two filters + the order column lets Postgres serve
+        # page 1 from an index scan once the corpus crosses ~50k rows.
+        Index(
+            "ix_listings_default_feed",
+            "classification",
+            "auto_hidden",
+            "posted_at",
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)

@@ -137,13 +137,14 @@ export function LeadPanel({
               <option value="email">Email</option>
               <option value="task">Task</option>
             </select>
-            <input
-              name="body"
-              required
-              placeholder="What happened?"
-              className="input flex-1"
-            />
           </div>
+          <textarea
+            name="body"
+            required
+            rows={3}
+            placeholder="What happened? (e.g. Left voicemail; said wife will call back this evening)"
+            className="input"
+          />
           <button type="submit" className="btn-primary w-full justify-center">
             Log
           </button>

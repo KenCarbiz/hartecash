@@ -83,6 +83,11 @@ PROTECTED_ENDPOINTS: list[tuple[str, str, dict | None]] = [
         {"listings": []},
     ),
     ("GET", "/sources/extension/lookup?url=https://example.com/x", None),
+    (
+        "POST",
+        "/sources/extension/seller-phone",
+        {"listing_id": 1, "phone": "8135551234"},
+    ),
     # Telemetry (extension breakage reports)
     (
         "POST",
