@@ -8,13 +8,13 @@ are rejected in production.
 import csv
 import io
 from collections.abc import Iterator
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import and_, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
 from fsbo.auth.resolver import DealerId
@@ -114,10 +114,17 @@ def create_lead(
     if existing:
         return LeadOut.model_validate(existing)
 
+    # Auto-assign via routing config when the caller didn't pick a rep.
+    assigned_to = payload.assigned_to
+    if assigned_to is None:
+        from fsbo.api.routes.routing import assign_next
+
+        assigned_to = assign_next(db, dealer_id)
+
     lead = Lead(
         dealer_id=dealer_id,
         listing_id=payload.listing_id,
-        assigned_to=payload.assigned_to,
+        assigned_to=assigned_to,
         notes=payload.notes,
     )
     db.add(lead)
@@ -159,13 +166,54 @@ def bulk_claim(
             )
         ).all()
     )
+    # Auto-route bulk claims when the caller didn't pin assigned_to.
+    # We look up the routing config once + assign each new lead to the
+    # currently-least-loaded rep, refreshing the count after each
+    # assignment so a 50-listing bulk claim distributes evenly across
+    # the pool instead of dumping all 50 on the same person.
+    use_routing = payload.assigned_to is None
+    routing_loads: dict[str, int] = {}
+    routing_pool: list[str] = []
+    if use_routing:
+        from fsbo.api.routes.routing import (
+            ACTIVE_STATUSES,
+            LOAD_WINDOW_DAYS,
+        )
+        from fsbo.models import Dealer
+
+        dealer = db.scalar(select(Dealer).where(Dealer.slug == dealer_id))
+        if dealer and dealer.routing_mode == "least_loaded" and dealer.routing_pool:
+            routing_pool = list(dealer.routing_pool)
+            since = datetime.now(timezone.utc) - timedelta(days=LOAD_WINDOW_DAYS)
+            rows = db.execute(
+                select(Lead.assigned_to, func.count(Lead.id))
+                .where(
+                    Lead.dealer_id == dealer_id,
+                    Lead.assigned_to.in_(routing_pool),
+                    Lead.status.in_(ACTIVE_STATUSES),
+                    Lead.created_at >= since,
+                )
+                .group_by(Lead.assigned_to)
+            ).all()
+            routing_loads = {h: 0 for h in routing_pool}
+            for handle, n in rows:
+                if handle in routing_loads:
+                    routing_loads[handle] = int(n)
+
     to_claim = found_ids - already
     for listing_id in to_claim:
+        assigned_to = payload.assigned_to
+        if assigned_to is None and routing_pool:
+            assigned_to = min(
+                routing_pool,
+                key=lambda h: (routing_loads[h], routing_pool.index(h)),
+            )
+            routing_loads[assigned_to] = routing_loads.get(assigned_to, 0) + 1
         db.add(
             Lead(
                 dealer_id=dealer_id,
                 listing_id=listing_id,
-                assigned_to=payload.assigned_to,
+                assigned_to=assigned_to,
             )
         )
     db.flush()

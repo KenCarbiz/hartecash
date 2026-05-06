@@ -271,6 +271,16 @@ class Dealer(Base):
     stripe_customer_id: Mapped[str | None] = mapped_column(
         String(64), unique=True, index=True
     )
+    # Lead-routing config. routing_mode="manual" (default) leaves
+    # Lead.assigned_to alone; "least_loaded" auto-assigns new leads
+    # to the rep in routing_pool with the fewest active leads. Pool
+    # is a list of free-text handles (no User-table dependency).
+    routing_mode: Mapped[str] = mapped_column(
+        String(16), default="manual", nullable=False
+    )
+    routing_pool: Mapped[list] = mapped_column(
+        JSON, default=list, nullable=False
+    )
 
 
 class Subscription(Base):
