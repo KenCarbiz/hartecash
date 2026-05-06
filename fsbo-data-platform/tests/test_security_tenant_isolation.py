@@ -41,6 +41,13 @@ PROTECTED_ENDPOINTS: list[tuple[str, str, dict | None]] = [
     # CRM
     ("GET", "/leads", None),
     ("POST", "/leads", {"listing_id": 1}),
+    (
+        "POST",
+        "/leads/bulk-status",
+        {"lead_ids": [1], "status": "contacted"},
+    ),
+    ("POST", "/leads/bulk-assign", {"lead_ids": [1], "assigned_to": "x"}),
+    ("POST", "/leads/bulk-archive", {"lead_ids": [1]}),
     ("GET", "/leads/teammates", None),
     ("GET", "/leads/export.csv", None),
     # Messages

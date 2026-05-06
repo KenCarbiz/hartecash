@@ -225,6 +225,160 @@ def bulk_claim(
     )
 
 
+class BulkLeadOpIn(BaseModel):
+    """Generic bulk-op payload — caller supplies a list of lead ids
+    + the per-op fields. Each endpoint validates only the fields it
+    needs."""
+
+    lead_ids: list[int]
+    # status-change op
+    status: LeadStatus | None = None
+    # assign op
+    assigned_to: str | None = None
+    # archive op
+    reason: str | None = None
+
+
+class BulkLeadOpOut(BaseModel):
+    updated: int
+    skipped: int
+    not_found: list[int]
+
+
+def _bulk_load_leads(
+    db: Session, lead_ids: list[int], dealer_id: str
+) -> tuple[list[Lead], list[int]]:
+    """Load + dealer-scope-check a list of leads. Returns
+    (found_leads, not_found_ids). Caps at 200 to bound the work."""
+    ids = list({*lead_ids})[:200]
+    rows = db.scalars(
+        select(Lead).where(Lead.id.in_(ids), Lead.dealer_id == dealer_id)
+    ).all()
+    found_ids = {r.id for r in rows}
+    return list(rows), [i for i in ids if i not in found_ids]
+
+
+@router.post("/leads/bulk-status", response_model=BulkLeadOpOut)
+def bulk_status_change(
+    payload: BulkLeadOpIn,
+    dealer_id: DealerId,
+    db: Annotated[Session, Depends(get_session)],
+) -> BulkLeadOpOut:
+    """Move many leads to the same status in one call. Logs a
+    status_change Interaction on each lead. Fires the
+    lead.status_changed webhook for each that actually changed."""
+    if payload.status is None:
+        raise HTTPException(400, "status is required")
+    leads, missing = _bulk_load_leads(db, payload.lead_ids, dealer_id)
+    new_status = payload.status.value
+
+    updated = 0
+    skipped = 0
+    changed_leads: list[tuple[Lead, str]] = []
+    now = datetime.now(timezone.utc)
+    for lead in leads:
+        if lead.status == new_status:
+            skipped += 1
+            continue
+        prev = lead.status
+        lead.status = new_status
+        lead.updated_at = now
+        db.add(
+            Interaction(
+                lead_id=lead.id,
+                kind=InteractionKind.STATUS_CHANGE.value,
+                body=f"{prev} → {new_status} (bulk op)",
+                actor=dealer_id,
+            )
+        )
+        changed_leads.append((lead, prev))
+        updated += 1
+    db.flush()
+
+    # Webhook fan-out (best-effort)
+    if changed_leads:
+        from fsbo.webhooks.delivery import enqueue_for_lead_status_change
+
+        for lead, prev in changed_leads:
+            try:
+                enqueue_for_lead_status_change(db, lead, prev)
+            except Exception:  # noqa: BLE001
+                pass
+
+    return BulkLeadOpOut(updated=updated, skipped=skipped, not_found=missing)
+
+
+@router.post("/leads/bulk-assign", response_model=BulkLeadOpOut)
+def bulk_assign(
+    payload: BulkLeadOpIn,
+    dealer_id: DealerId,
+    db: Annotated[Session, Depends(get_session)],
+) -> BulkLeadOpOut:
+    """Re-assign many leads to one rep. assigned_to=null clears the
+    assignment (back to unassigned). Idempotent: already-matching
+    leads count as 'skipped'."""
+    new_owner = payload.assigned_to
+    leads, missing = _bulk_load_leads(db, payload.lead_ids, dealer_id)
+
+    updated = 0
+    skipped = 0
+    now = datetime.now(timezone.utc)
+    for lead in leads:
+        if lead.assigned_to == new_owner:
+            skipped += 1
+            continue
+        prev = lead.assigned_to or "(unassigned)"
+        lead.assigned_to = new_owner
+        lead.updated_at = now
+        db.add(
+            Interaction(
+                lead_id=lead.id,
+                kind=InteractionKind.NOTE.value,
+                body=f"reassigned: {prev} → {new_owner or '(unassigned)'} (bulk op)",
+                actor=dealer_id,
+            )
+        )
+        updated += 1
+    db.flush()
+    return BulkLeadOpOut(updated=updated, skipped=skipped, not_found=missing)
+
+
+@router.post("/leads/bulk-archive", response_model=BulkLeadOpOut)
+def bulk_archive(
+    payload: BulkLeadOpIn,
+    dealer_id: DealerId,
+    db: Annotated[Session, Depends(get_session)],
+) -> BulkLeadOpOut:
+    """Soft-delete many leads at once. Skips leads that are already
+    archived. Reuses the same audit-trail mechanic as the per-lead
+    /archive endpoint."""
+    leads, missing = _bulk_load_leads(db, payload.lead_ids, dealer_id)
+    reason = (payload.reason or "")[:256] or None
+
+    updated = 0
+    skipped = 0
+    now = datetime.now(timezone.utc)
+    for lead in leads:
+        if lead.deleted_at is not None:
+            skipped += 1
+            continue
+        lead.deleted_at = now
+        lead.deleted_by = dealer_id
+        lead.delete_reason = reason
+        lead.updated_at = now
+        db.add(
+            Interaction(
+                lead_id=lead.id,
+                kind=InteractionKind.STATUS_CHANGE.value,
+                body=f"archived (bulk): {reason or 'no reason given'}",
+                actor=dealer_id,
+            )
+        )
+        updated += 1
+    db.flush()
+    return BulkLeadOpOut(updated=updated, skipped=skipped, not_found=missing)
+
+
 class TeammateRow(BaseModel):
     email: str
     name: str | None
