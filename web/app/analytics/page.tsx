@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/AppShell";
-import { getFunnel } from "@/lib/api";
+import { LeaderboardPanel } from "@/components/LeaderboardPanel";
+import { getFunnel, getLeaderboard } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +12,10 @@ export default async function AnalyticsPage({
 }) {
   const { days } = await searchParams;
   const window = Number(days) || 30;
-  const funnel = await getFunnel(window).catch(() => null);
+  const [funnel, leaderboard] = await Promise.all([
+    getFunnel(window).catch(() => null),
+    getLeaderboard(window).catch(() => null),
+  ]);
 
   if (!funnel) {
     return (
@@ -127,6 +131,10 @@ export default async function AnalyticsPage({
             }
           />
         </div>
+      </div>
+
+      <div className="mb-6">
+        <LeaderboardPanel leaderboard={leaderboard} days={window} />
       </div>
 
       <div className="panel">

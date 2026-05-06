@@ -128,6 +128,8 @@ PROTECTED_ENDPOINTS: list[tuple[str, str, dict | None]] = [
     ("POST", "/offers", {"lead_id": 1, "amount_cents": 1500000}),
     ("GET", "/offers/by-lead/1", None),
     ("POST", "/offers/1/withdraw", None),
+    # Per-rep leaderboard
+    ("GET", "/analytics/leaderboard", None),
     # Admin
     ("POST", "/admin/rescore", None),
 ]

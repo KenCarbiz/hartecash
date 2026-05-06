@@ -1213,3 +1213,34 @@ export async function publicDeclineOffer(
     throw new FsboApiError(`FSBO API ${res.status}`, res.status, await res.text());
   return (await res.json()) as PublicOffer;
 }
+
+// ---------- per-rep leaderboard ----------
+
+export interface RepRow {
+  assigned_to: string;
+  leads_claimed: number;
+  leads_contacted: number;
+  leads_appointment: number;
+  leads_purchased: number;
+  sms_sent: number;
+  voice_calls: number;
+  offers_sent: number;
+  offers_accepted: number;
+  avg_response_minutes: number | null;
+  score: number;
+}
+
+export interface LeaderboardResponse {
+  dealer_id: string;
+  since: string;
+  until: string;
+  reps: RepRow[];
+}
+
+export async function getLeaderboard(
+  days = 30,
+): Promise<LeaderboardResponse | null> {
+  const res = await apiFetch(`/analytics/leaderboard?days=${days}`);
+  if (!res.ok) return null;
+  return (await res.json()) as LeaderboardResponse;
+}
