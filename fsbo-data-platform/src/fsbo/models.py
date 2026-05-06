@@ -476,6 +476,26 @@ class ApiKey(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class ZipGeocode(Base):
+    """Cached ZIP -> lat/long row. Geocoding is read-heavy and the
+    answer never changes; on cache miss we hit the Census Geocoder
+    (free, no API key) and persist the result. The 20-ZIP hot-path
+    in fsbo.enrichment.geocode._FALLBACK_ZIPS lets dev/CI work
+    without ever touching the network or DB."""
+
+    __tablename__ = "zip_geocodes"
+
+    zip_code: Mapped[str] = mapped_column(String(10), primary_key=True)
+    lat: Mapped[float] = mapped_column(Float, nullable=False)
+    lon: Mapped[float] = mapped_column(Float, nullable=False)
+    source: Mapped[str] = mapped_column(
+        String(16), default="census", nullable=False
+    )
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class ExtensionInstallCode(Base):
     """Short-lived single-use code that an extension exchanges for an
     API key without ever asking the dealer to copy/paste a long token.

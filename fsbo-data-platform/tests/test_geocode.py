@@ -1,3 +1,4 @@
+from fsbo.enrichment import geocode as geomod
 from fsbo.enrichment.geocode import GeoPoint, geocode, haversine_miles
 
 
@@ -7,18 +8,16 @@ def test_known_zip_resolves():
     assert 27 < p.lat < 29 and -83 < p.lon < -82
 
 
-def test_unknown_zip_falls_back_to_prefix():
-    # 33612 isn't in the table, but 336xx prefix matches Tampa-area zips.
-    p = geocode("33612")
-    assert p is not None
-
-
-def test_unknown_completely():
-    p = geocode("99999")
+def test_unknown_zip_with_no_cache_and_no_census(db_session, monkeypatch):
+    """A ZIP that isn't in the hot-path fallback + isn't cached + Census
+    fails should return None, not crash."""
+    monkeypatch.setattr(geomod, "_from_census", lambda z, **kw: None)
+    p = geocode("99999", db=db_session)
     assert p is None
 
 
 def test_zip_plus_4_stripped():
+    # +4 strips to 33607 which IS in the hot-path fallback.
     p = geocode("33607-1234")
     assert p is not None
 

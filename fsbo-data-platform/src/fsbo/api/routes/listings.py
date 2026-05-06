@@ -9,7 +9,12 @@ from sqlalchemy.orm import Session
 from fsbo.api.schemas import ListingOut, ListingsPage
 from fsbo.auth.resolver import DealerId
 from fsbo.db import get_session
-from fsbo.enrichment.geocode import GeoPoint, geocode, haversine_miles
+from fsbo.enrichment.geocode import (
+    GeoPoint,
+    geocode,
+    geocode_cached_only,
+    haversine_miles,
+)
 from fsbo.models import Classification, Listing
 
 router = APIRouter(prefix="/listings", tags=["listings"])
@@ -111,9 +116,11 @@ def list_listings(
     # ZIP. Both fetch a bounded candidate set, distance-filter / sort in
     # Python, then offset+limit on the result. Without near_zip, sort=
     # distance falls back to posted_at order.
+    # Center: pass `db` so the Census-API result is cached on the same
+    # session (single network call max per /listings request).
     center: GeoPoint | None = None
     if near_zip:
-        center = geocode(near_zip)
+        center = geocode(near_zip, db=db)
 
     use_geo = bool(center) and (radius_miles is not None or sort == "distance")
 
@@ -128,7 +135,11 @@ def list_listings(
         )
         scored: list[tuple[float, "Listing"]] = []
         for r in candidates:
-            rp = geocode(r.zip_code) if r.zip_code else None
+            # Cached-only for the candidate loop — never fan out 5000
+            # Census calls. Listings without a cached ZIP just don't
+            # appear in the radius result until the cache is warmed
+            # via the background backfill or other geocode hits.
+            rp = geocode_cached_only(r.zip_code, db=db) if r.zip_code else None
             if rp is None:
                 continue
             d = haversine_miles(center, rp)
