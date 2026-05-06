@@ -426,16 +426,17 @@ def update_lead(
 ) -> LeadOut:
     lead = _require_lead(db, lead_id, dealer_id)
 
+    prev_status: str | None = None
     status_changed = False
     if payload.status is not None and payload.status.value != lead.status:
-        prev = lead.status
+        prev_status = lead.status
         lead.status = payload.status.value
         status_changed = True
         db.add(
             Interaction(
                 lead_id=lead.id,
                 kind=InteractionKind.STATUS_CHANGE.value,
-                body=f"{prev} → {lead.status}",
+                body=f"{prev_status} → {lead.status}",
                 actor=payload.assigned_to or lead.assigned_to,
             )
         )
@@ -446,8 +447,16 @@ def update_lead(
     if payload.notes is not None:
         lead.notes = payload.notes
     lead.updated_at = datetime.now(timezone.utc)
+    db.flush()
 
-    _ = status_changed  # reserved for future webhook: lead.status_changed
+    if status_changed:
+        from fsbo.webhooks.delivery import enqueue_for_lead_status_change
+
+        try:
+            enqueue_for_lead_status_change(db, lead, prev_status)
+        except Exception:  # noqa: BLE001 - webhook fan-out is best-effort
+            pass
+
     return LeadOut.model_validate(lead)
 
 

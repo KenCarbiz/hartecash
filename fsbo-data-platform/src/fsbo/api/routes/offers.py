@@ -317,6 +317,17 @@ def public_accept_offer(
         )
     )
     db.flush()
+
+    # Fire dealer-scoped webhook so DMS / CRM integrations get the
+    # acceptance immediately. Best-effort — never let a webhook failure
+    # break the seller's accept request.
+    from fsbo.webhooks.delivery import enqueue_for_offer_response
+
+    try:
+        enqueue_for_offer_response(db, offer)
+    except Exception:  # noqa: BLE001
+        pass
+
     return _public_view(db, offer)
 
 
@@ -351,4 +362,12 @@ def public_decline_offer(
         )
     )
     db.flush()
+
+    from fsbo.webhooks.delivery import enqueue_for_offer_response
+
+    try:
+        enqueue_for_offer_response(db, offer)
+    except Exception:  # noqa: BLE001
+        pass
+
     return _public_view(db, offer)

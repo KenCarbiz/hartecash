@@ -133,6 +133,20 @@ PROTECTED_ENDPOINTS: list[tuple[str, str, dict | None]] = [
     # Lead routing config
     ("GET", "/routing", None),
     ("PUT", "/routing", {"mode": "manual", "pool": []}),
+    # Webhook subscriptions (dealer-scoped CRUD + event catalog)
+    (
+        "POST",
+        "/webhooks/subscriptions",
+        {
+            "name": "demo",
+            "url": "https://example.com/hook",
+            "event": "lead.status_changed",
+            "filters": {},
+        },
+    ),
+    ("GET", "/webhooks/subscriptions", None),
+    ("DELETE", "/webhooks/subscriptions/1", None),
+    ("GET", "/webhooks/events", None),
     # Admin
     ("POST", "/admin/rescore", None),
 ]

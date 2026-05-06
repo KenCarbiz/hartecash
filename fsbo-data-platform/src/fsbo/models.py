@@ -191,8 +191,17 @@ class ScrapeRun(Base):
 
 class WebhookSubscription(Base):
     __tablename__ = "webhook_subscriptions"
+    __table_args__ = (
+        Index("ix_webhook_subs_dealer_event", "dealer_id", "event", "active"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # Dealer that owns the subscription. Events fire only for resources
+    # in this dealer's scope; listing.created fires globally because
+    # the corpus is shared, but lead/offer/voice events are dealer-scoped.
+    dealer_id: Mapped[str] = mapped_column(
+        String(64), nullable=False, index=True, default=""
+    )
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     url: Mapped[str] = mapped_column(Text, nullable=False)
     secret: Mapped[str] = mapped_column(String(128), nullable=False)

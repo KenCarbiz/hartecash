@@ -378,6 +378,18 @@ async def twiml_status(
         lead.updated_at = datetime.now(timezone.utc)
 
     db.flush()
+
+    # Webhook fan-out: notify any DMS / CRM the dealer subscribed to
+    # voice_call.completed. Best-effort — never let a webhook failure
+    # break Twilio's status callback.
+    if CallStatus == "completed":
+        from fsbo.webhooks.delivery import enqueue_for_voice_call_completed
+
+        try:
+            enqueue_for_voice_call_completed(db, call)
+        except Exception:  # noqa: BLE001
+            pass
+
     return {"ok": "1", "call_id": str(call.id)}
 
 

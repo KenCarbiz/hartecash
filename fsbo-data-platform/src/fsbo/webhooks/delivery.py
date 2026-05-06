@@ -1,22 +1,51 @@
 """Webhook dispatch + retry.
 
 Flow:
-  1. A listing.created event enqueues WebhookDelivery rows for each matching sub.
-  2. The delivery worker pulls pending rows, POSTs payloads with HMAC signature.
-  3. On non-2xx, marks next_attempt_at with exponential backoff (up to 5 attempts).
+  1. A domain event (listing.created, lead.status_changed, offer.accepted,
+     offer.declined, voice_call.completed) enqueues WebhookDelivery rows
+     for each matching active subscription.
+  2. The delivery worker pulls pending rows, POSTs payloads with HMAC
+     signature in the X-FSBO-Signature header.
+  3. On non-2xx, marks next_attempt_at with exponential backoff
+     (up to 5 attempts).
+
+Dealer scoping:
+- listing.created fires globally — the corpus is shared, dealers
+  subscribe with filters (e.g. {"state": "FL"}) to slice it.
+- All other events are dealer-scoped: only subscriptions belonging
+  to the same dealer as the resource get a delivery.
 """
 
 import hashlib
 import hmac
 import json
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from fsbo.logging import get_logger
-from fsbo.models import Listing, WebhookDelivery, WebhookSubscription
+from fsbo.models import (
+    Lead,
+    Listing,
+    Offer,
+    VoiceCall,
+    WebhookDelivery,
+    WebhookSubscription,
+)
+
+# Canonical event names. The first is global (cross-dealer); the rest
+# are dealer-scoped — the enqueue helper filters subs by dealer_id.
+GLOBAL_EVENTS = {"listing.created"}
+DEALER_EVENTS = {
+    "lead.status_changed",
+    "offer.accepted",
+    "offer.declined",
+    "voice_call.completed",
+}
+ALL_EVENTS = GLOBAL_EVENTS | DEALER_EVENTS
 
 log = get_logger(__name__)
 
@@ -67,7 +96,9 @@ def matches_filters(listing: Listing, filters: dict) -> bool:
 
 
 def enqueue_for_listing(db: Session, listing: Listing) -> int:
-    """Create pending delivery rows for all active subs matching this listing."""
+    """Create pending delivery rows for all active subs matching this listing.
+    listing.created is GLOBAL — every active subscription with the
+    matching event + matching filters gets a row."""
     subs = db.scalars(
         select(WebhookSubscription).where(
             WebhookSubscription.active.is_(True),
@@ -93,6 +124,131 @@ def enqueue_for_listing(db: Session, listing: Listing) -> int:
         )
         count += 1
     return count
+
+
+def _enqueue_dealer_scoped(
+    db: Session,
+    *,
+    event: str,
+    dealer_id: str,
+    payload: dict[str, Any],
+    listing_id: int | None = None,
+) -> int:
+    """Common helper: fan an event out to every active subscription
+    belonging to `dealer_id` for this event type. Returns the number of
+    delivery rows created."""
+    if event not in DEALER_EVENTS:
+        raise ValueError(
+            f"event {event!r} is not in DEALER_EVENTS — use enqueue_for_listing"
+        )
+    subs = db.scalars(
+        select(WebhookSubscription).where(
+            WebhookSubscription.active.is_(True),
+            WebhookSubscription.event == event,
+            WebhookSubscription.dealer_id == dealer_id,
+        )
+    ).all()
+    if not subs:
+        return 0
+
+    now = datetime.now(timezone.utc)
+    count = 0
+    for sub in subs:
+        db.add(
+            WebhookDelivery(
+                subscription_id=sub.id,
+                listing_id=listing_id or 0,
+                event=event,
+                payload=payload,
+                status="pending",
+                next_attempt_at=now,
+            )
+        )
+        count += 1
+    return count
+
+
+def lead_payload(lead: Lead, *, prev_status: str | None = None) -> dict[str, Any]:
+    return {
+        "event": "lead.status_changed",
+        "lead": {
+            "id": lead.id,
+            "dealer_id": lead.dealer_id,
+            "listing_id": lead.listing_id,
+            "assigned_to": lead.assigned_to,
+            "status": lead.status,
+            "prev_status": prev_status,
+            "offered_price": lead.offered_price,
+            "updated_at": lead.updated_at.isoformat() if lead.updated_at else None,
+        },
+    }
+
+
+def offer_payload(offer: Offer, kind: str) -> dict[str, Any]:
+    """`kind` is the event suffix: 'accepted' or 'declined'."""
+    return {
+        "event": f"offer.{kind}",
+        "offer": {
+            "id": offer.id,
+            "dealer_id": offer.dealer_id,
+            "lead_id": offer.lead_id,
+            "listing_id": offer.listing_id,
+            "amount_cents": offer.amount_cents,
+            "status": offer.status,
+            "seller_response_at": offer.seller_response_at.isoformat()
+            if offer.seller_response_at
+            else None,
+            "seller_response_note": offer.seller_response_note,
+        },
+    }
+
+
+def voice_call_payload(call: VoiceCall) -> dict[str, Any]:
+    return {
+        "event": "voice_call.completed",
+        "voice_call": {
+            "id": call.id,
+            "dealer_id": call.dealer_id,
+            "lead_id": call.lead_id,
+            "duration_seconds": call.duration_seconds,
+            "status": call.status,
+            "intake": dict(call.intake or {}),
+            "turn_count": len(call.turns or []),
+        },
+    }
+
+
+def enqueue_for_lead_status_change(
+    db: Session, lead: Lead, prev_status: str | None
+) -> int:
+    return _enqueue_dealer_scoped(
+        db,
+        event="lead.status_changed",
+        dealer_id=lead.dealer_id,
+        payload=lead_payload(lead, prev_status=prev_status),
+        listing_id=lead.listing_id,
+    )
+
+
+def enqueue_for_offer_response(db: Session, offer: Offer) -> int:
+    if offer.status not in ("accepted", "declined"):
+        return 0
+    return _enqueue_dealer_scoped(
+        db,
+        event=f"offer.{offer.status}",
+        dealer_id=offer.dealer_id,
+        payload=offer_payload(offer, offer.status),
+        listing_id=offer.listing_id,
+    )
+
+
+def enqueue_for_voice_call_completed(db: Session, call: VoiceCall) -> int:
+    return _enqueue_dealer_scoped(
+        db,
+        event="voice_call.completed",
+        dealer_id=call.dealer_id,
+        payload=voice_call_payload(call),
+    )
 
 
 async def deliver_pending(db: Session, batch_size: int = 25) -> int:
