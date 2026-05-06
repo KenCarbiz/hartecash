@@ -1244,3 +1244,25 @@ export async function getLeaderboard(
   if (!res.ok) return null;
   return (await res.json()) as LeaderboardResponse;
 }
+
+// ---- Onboarding checklist ----
+
+export interface OnboardingItem {
+  key: string;
+  label: string;
+  done: boolean;
+  detail: string | null;
+}
+
+export interface OnboardingChecklist {
+  dealer_id: string;
+  items: OnboardingItem[];
+  completed: number;
+  total: number;
+}
+
+export async function getOnboardingChecklist(): Promise<OnboardingChecklist | null> {
+  const res = await apiFetch("/onboarding/checklist");
+  if (!res.ok) return null;
+  return (await res.json()) as OnboardingChecklist;
+}

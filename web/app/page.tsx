@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/AppShell";
 import { BattleTracker } from "@/components/BattleTracker";
+import { OnboardingPanel } from "@/components/OnboardingPanel";
 import {
   FsboApiError,
   formatPrice,
@@ -118,6 +119,8 @@ export default async function Home() {
           ({data.error})
         </div>
       )}
+
+      <OnboardingPanel />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         <Kpi
