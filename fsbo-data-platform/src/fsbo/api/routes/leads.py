@@ -129,6 +129,15 @@ def create_lead(
     )
     db.add(lead)
     db.flush()
+
+    if assigned_to:
+        from fsbo.messaging.assign_notify import notify_assignment
+
+        try:
+            notify_assignment(db, lead)
+        except Exception:  # noqa: BLE001
+            pass
+
     return LeadOut.model_validate(lead)
 
 
@@ -201,6 +210,7 @@ def bulk_claim(
                     routing_loads[handle] = int(n)
 
     to_claim = found_ids - already
+    new_leads: list[Lead] = []
     for listing_id in to_claim:
         assigned_to = payload.assigned_to
         if assigned_to is None and routing_pool:
@@ -209,14 +219,26 @@ def bulk_claim(
                 key=lambda h: (routing_loads[h], routing_pool.index(h)),
             )
             routing_loads[assigned_to] = routing_loads.get(assigned_to, 0) + 1
-        db.add(
-            Lead(
-                dealer_id=dealer_id,
-                listing_id=listing_id,
-                assigned_to=assigned_to,
-            )
+        lead = Lead(
+            dealer_id=dealer_id,
+            listing_id=listing_id,
+            assigned_to=assigned_to,
         )
+        db.add(lead)
+        new_leads.append(lead)
     db.flush()
+
+    # Best-effort notify after flush so each lead has its id.
+    if any(l.assigned_to for l in new_leads):
+        from fsbo.messaging.assign_notify import notify_assignment
+
+        for lead in new_leads:
+            if not lead.assigned_to:
+                continue
+            try:
+                notify_assignment(db, lead)
+            except Exception:  # noqa: BLE001
+                pass
 
     return BulkClaimOut(
         claimed=len(to_claim),
@@ -322,6 +344,7 @@ def bulk_assign(
 
     updated = 0
     skipped = 0
+    reassigned: list[tuple[Lead, str]] = []  # (lead, prev_owner) for notification
     now = datetime.now(timezone.utc)
     for lead in leads:
         if lead.assigned_to == new_owner:
@@ -338,8 +361,20 @@ def bulk_assign(
                 actor=dealer_id,
             )
         )
+        if new_owner:
+            reassigned.append((lead, prev))
         updated += 1
     db.flush()
+
+    if reassigned:
+        from fsbo.messaging.assign_notify import notify_assignment
+
+        for lead, prev in reassigned:
+            try:
+                notify_assignment(db, lead, prev_owner=prev)
+            except Exception:  # noqa: BLE001
+                pass
+
     return BulkLeadOpOut(updated=updated, skipped=skipped, not_found=missing)
 
 
