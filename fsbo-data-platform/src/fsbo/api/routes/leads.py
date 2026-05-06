@@ -582,6 +582,126 @@ def list_leads(
     ]
 
 
+class StaleLeadRow(LeadWithListing):
+    """A lead in the response-SLA breach queue.
+
+    `minutes_since_created` lets the dashboard color-code urgency
+    without re-doing the math client-side.
+    """
+
+    minutes_since_created: int
+
+
+@router.get("/leads/stale", response_model=list[StaleLeadRow])
+def list_stale_leads(
+    dealer_id: DealerId,
+    db: Annotated[Session, Depends(get_session)],
+    sla_minutes: int = 5,
+    limit: int = 50,
+) -> list[StaleLeadRow]:
+    """Leads still un-contacted past the SLA window — the "needs
+    attention now" queue.
+
+    A lead is stale when:
+      - status is still 'new' or 'contacted'
+      - it's older than sla_minutes
+      - there is no outbound Interaction, Message, or VoiceCall on it
+      - it isn't archived
+    Ordered oldest-first so the rep works the most-urgent backlog first.
+    """
+    from fsbo.models import Message, VoiceCall
+
+    if sla_minutes < 0:
+        sla_minutes = 0
+    if limit > 200:
+        limit = 200
+
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=sla_minutes)
+
+    # Lead ids are globally unique so we could skip the join, but
+    # narrowing to this dealer keeps the working set small for big DBs.
+    dealer_lead_ids_subq = (
+        select(Lead.id).where(Lead.dealer_id == dealer_id)
+    )
+    contacted_lead_ids = set(
+        db.scalars(
+            select(Interaction.lead_id)
+            .where(
+                Interaction.direction == "outbound",
+                Interaction.lead_id.in_(dealer_lead_ids_subq),
+            )
+            .distinct()
+        ).all()
+    )
+    contacted_lead_ids |= set(
+        db.scalars(
+            select(Message.lead_id)
+            .where(
+                Message.direction == "outbound",
+                Message.lead_id.in_(dealer_lead_ids_subq),
+            )
+            .distinct()
+        ).all()
+    )
+    contacted_lead_ids |= set(
+        db.scalars(
+            select(VoiceCall.lead_id)
+            .where(VoiceCall.dealer_id == dealer_id)
+            .distinct()
+        ).all()
+    )
+
+    stmt = (
+        select(Lead, Listing)
+        .join(Listing, Lead.listing_id == Listing.id)
+        .where(
+            Lead.dealer_id == dealer_id,
+            Lead.deleted_at.is_(None),
+            Lead.status.in_(("new", "contacted")),
+            Lead.created_at <= cutoff,
+        )
+    )
+    if contacted_lead_ids:
+        stmt = stmt.where(Lead.id.notin_(contacted_lead_ids))
+    stmt = stmt.order_by(Lead.created_at.asc()).limit(limit)
+
+    now = datetime.now(timezone.utc)
+    rows = db.execute(stmt).all()
+    out: list[StaleLeadRow] = []
+    for lead, listing in rows:
+        created = (
+            lead.created_at
+            if lead.created_at.tzinfo
+            else lead.created_at.replace(tzinfo=timezone.utc)
+        )
+        minutes = max(0, int((now - created).total_seconds() // 60))
+        out.append(
+            StaleLeadRow(
+                id=lead.id,
+                dealer_id=lead.dealer_id,
+                listing_id=lead.listing_id,
+                assigned_to=lead.assigned_to,
+                status=lead.status,
+                offered_price=lead.offered_price,
+                notes=lead.notes,
+                created_at=lead.created_at,
+                updated_at=lead.updated_at,
+                listing_title=listing.title,
+                listing_year=listing.year,
+                listing_make=listing.make,
+                listing_model=listing.model,
+                listing_price=listing.price,
+                listing_mileage=listing.mileage,
+                listing_city=listing.city,
+                listing_state=listing.state,
+                listing_zip=listing.zip_code,
+                listing_source=listing.source,
+                minutes_since_created=minutes,
+            )
+        )
+    return out
+
+
 @router.get("/leads/by-listing/{listing_id}", response_model=LeadOut | None)
 def get_lead_by_listing(
     listing_id: int,
