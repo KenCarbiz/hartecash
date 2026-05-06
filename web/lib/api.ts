@@ -1043,6 +1043,28 @@ export async function startVoiceCall(
   return (await res.json()) as StartVoiceCallResult;
 }
 
+/** Click-to-call dealer bridge: rings the rep's phone first, then
+ *  bridges them to the seller. Caller ID is the dealership's Twilio
+ *  number, not the rep's mobile. */
+export async function startBridgeCall(
+  leadId: number,
+  repPhone: string,
+  record = true,
+): Promise<StartVoiceCallResult> {
+  const res = await apiFetch("/voice/bridge", {
+    method: "POST",
+    body: JSON.stringify({
+      lead_id: leadId,
+      rep_phone: repPhone,
+      record,
+    }),
+  });
+  if (!res.ok) {
+    throw new FsboApiError(`FSBO API ${res.status}`, res.status, await res.text());
+  }
+  return (await res.json()) as StartVoiceCallResult;
+}
+
 export async function listVoiceCalls(leadId: number): Promise<VoiceCall[]> {
   const res = await apiFetch(`/leads/${leadId}/voice-calls`);
   if (!res.ok) return [];

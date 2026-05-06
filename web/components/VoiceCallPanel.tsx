@@ -1,8 +1,11 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 
-import { startVoiceCallAction } from "@/app/listings/[id]/voice-actions";
+import {
+  startBridgeCallAction,
+  startVoiceCallAction,
+} from "@/app/listings/[id]/voice-actions";
 import {
   formatRelativeDate,
   type SellerIntake,
@@ -100,6 +103,10 @@ export function VoiceCallPanel({
             <p className="self-center text-[11px] text-rose-700">⚠ {error}</p>
           )}
         </div>
+
+        {leadId && sellerPhone && (
+          <BridgeCallForm leadId={leadId} listingId={listingId} />
+        )}
 
         {latest && <LatestCallView call={latest} />}
 
@@ -323,6 +330,91 @@ function FlagRow({ label, items }: { label: string; items: string[] }) {
         </span>
       ))}
     </div>
+  );
+}
+
+/** Click-to-call bridge: rep types their cell once, we ring them, then
+ *  bridge to the seller. Caller ID is the dealership's Twilio number,
+ *  not the rep's mobile, so the seller never learns their personal #. */
+function BridgeCallForm({
+  leadId,
+  listingId,
+}: {
+  leadId: number;
+  listingId: number;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [repPhone, setRepPhone] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  // Remember the rep's phone across sessions so they don't retype it.
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("aa.rep_phone");
+      if (saved) setRepPhone(saved);
+    } catch {
+      /* ignore (Safari private mode etc.) */
+    }
+  }, []);
+
+  const onSubmit = (formData: FormData) => {
+    setError(null);
+    setSuccess(null);
+    try {
+      localStorage.setItem("aa.rep_phone", repPhone);
+    } catch {
+      /* ignore */
+    }
+    startTransition(async () => {
+      const res = await startBridgeCallAction(leadId, listingId, formData);
+      if (!res.ok) {
+        setError(res.error ?? "bridge failed");
+        return;
+      }
+      setSuccess(
+        res.status === "simulated"
+          ? "Bridge queued in simulation mode (configure Twilio to dial for real)."
+          : "Your phone is ringing. Pick up to connect to the seller.",
+      );
+    });
+  };
+
+  return (
+    <form
+      action={onSubmit}
+      className="rounded-md border border-ink-200 bg-white p-3 space-y-2"
+    >
+      <div className="flex items-baseline justify-between">
+        <p className="text-xs font-medium text-ink-700">Call from your phone</p>
+        <p className="text-[10px] text-ink-500">
+          Caller ID = your dealer line
+        </p>
+      </div>
+      <div className="flex gap-2">
+        <input
+          type="tel"
+          name="rep_phone"
+          value={repPhone}
+          onChange={(e) => setRepPhone(e.target.value)}
+          placeholder="(813) 555-0100"
+          autoComplete="tel"
+          className="input flex-1 text-xs"
+          required
+        />
+        <button
+          type="submit"
+          disabled={pending || !repPhone.trim()}
+          className="btn-secondary text-xs"
+        >
+          {pending ? "Ringing…" : "Call now"}
+        </button>
+      </div>
+      {success && (
+        <p className="text-[11px] text-emerald-700">✓ {success}</p>
+      )}
+      {error && <p className="text-[11px] text-rose-700">⚠ {error}</p>}
+    </form>
   );
 }
 
