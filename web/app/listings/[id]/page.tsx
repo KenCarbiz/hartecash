@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/AppShell";
 import { ComposePanel } from "@/components/ComposePanel";
@@ -7,6 +8,7 @@ import { ListingTimeline } from "@/components/ListingTimeline";
 import { MarketBadge } from "@/components/MarketBadge";
 import { ConditionPanel } from "@/components/ConditionPanel";
 import { HistoryReportPanel } from "@/components/HistoryReportPanel";
+import { OfferComposerPanel } from "@/components/OfferComposerPanel";
 import { PlateChip, VehicleFactsEditor } from "@/components/VehicleFactsEditor";
 import { QualityPanel } from "@/components/QualityPanel";
 import { UnifiedFeedPanel } from "@/components/UnifiedFeedPanel";
@@ -24,6 +26,7 @@ import {
   getMarketEstimate,
   getVehicleFile,
   listInteractions,
+  listOffersForLead,
   listTeammates,
   listTemplates,
   listVoiceCalls,
@@ -95,6 +98,7 @@ export default async function ListingDetailPage({
     feed,
     voiceCalls,
     historyReport,
+    offers,
   ] = await Promise.all([
     lead ? listInteractions(lead.id).catch(() => []) : Promise.resolve([]),
     listTemplates().catch(() => []),
@@ -105,7 +109,15 @@ export default async function ListingDetailPage({
     lead ? getLeadFeed(lead.id).catch(() => []) : Promise.resolve([]),
     lead ? listVoiceCalls(lead.id).catch(() => []) : Promise.resolve([]),
     getCachedHistoryReport(listingId).catch(() => null),
+    lead ? listOffersForLead(lead.id).catch(() => []) : Promise.resolve([]),
   ]);
+
+  // App origin so the OfferComposer can show the dealer the public
+  // offer URL they'll text the seller.
+  const h = await headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
+  const proto = h.get("x-forwarded-proto") ?? "http";
+  const appOrigin = `${proto}://${host}`;
 
   const vehicleLine = [listing.year, listing.make, listing.model, listing.trim]
     .filter(Boolean)
@@ -336,6 +348,13 @@ export default async function ListingDetailPage({
             listingId={listing.id}
             sellerPhone={listing.seller_phone}
             calls={voiceCalls}
+          />
+          <OfferComposerPanel
+            leadId={lead?.id ?? null}
+            listingId={listing.id}
+            appOrigin={appOrigin}
+            offers={offers}
+            marketMedian={market?.median ?? null}
           />
           {lead && (
             <ComposePanel
