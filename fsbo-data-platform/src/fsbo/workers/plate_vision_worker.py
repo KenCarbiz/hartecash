@@ -20,6 +20,11 @@ from sqlalchemy import and_, or_, select
 
 from fsbo.db import session_scope
 from fsbo.enrichment.plate_vision import extract_plate_from_images
+from fsbo.enrichment.seller_graph import (
+    find_corpus_vin_for_plate,
+    register_listing_identities,
+)
+from fsbo.enrichment.vin import decode_vin
 from fsbo.logging import configure, get_logger
 from fsbo.models import Listing
 
@@ -97,6 +102,34 @@ async def run(
                 if result.state and not row.license_plate_state:
                     row.license_plate_state = result.state
                 raw["plate_vision_source_image"] = result.source_image
+
+                # Plate-to-corpus VIN lookup. When we previously saw
+                # the same plate on a listing that did have a VIN,
+                # back-fill ours. Cheap, no external API.
+                if not row.vin:
+                    found_vin = find_corpus_vin_for_plate(
+                        db, result.plate, exclude_listing_id=row.id
+                    )
+                    if found_vin:
+                        row.vin = found_vin
+                        raw["vin_source"] = "plate_corpus_lookup"
+                        # NHTSA decode to fill year/make/model gaps.
+                        try:
+                            decoded = await decode_vin(found_vin)
+                            if decoded and not decoded.error_code:
+                                row.year = row.year or decoded.year
+                                row.make = row.make or decoded.make
+                                row.model = row.model or decoded.model
+                                row.trim = row.trim or decoded.trim
+                        except Exception:  # noqa: BLE001
+                            pass
+
+                # Re-link the seller-graph identities so the new plate
+                # contributes to the curbstoner cluster.
+                try:
+                    register_listing_identities(db, row)
+                except Exception:  # noqa: BLE001
+                    pass
             row.raw = raw
 
     return stats

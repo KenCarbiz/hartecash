@@ -66,6 +66,10 @@ def test_subscription_none_for_unsubscribed_dealer(client):
 
 
 def test_subscription_returns_most_recent_row(client, db_session):
+    """Pin timestamps explicitly — SQLite's default-now is millisecond-
+    coarse and the two flushed rows can collide on created_at, making
+    'most recent' order-dependent."""
+    now = datetime.now(timezone.utc)
     db_session.add(
         Subscription(
             dealer_id="demo-dealer",
@@ -73,7 +77,9 @@ def test_subscription_returns_most_recent_row(client, db_session):
             stripe_customer_id="cus_1",
             plan="starter",
             status="canceled",
-            current_period_end=datetime.now(timezone.utc) - timedelta(days=10),
+            current_period_end=now - timedelta(days=10),
+            created_at=now - timedelta(hours=1),
+            updated_at=now - timedelta(hours=1),
         )
     )
     db_session.add(
@@ -83,7 +89,9 @@ def test_subscription_returns_most_recent_row(client, db_session):
             stripe_customer_id="cus_1",
             plan="pro",
             status="active",
-            current_period_end=datetime.now(timezone.utc) + timedelta(days=20),
+            current_period_end=now + timedelta(days=20),
+            created_at=now,
+            updated_at=now,
         )
     )
     db_session.flush()
