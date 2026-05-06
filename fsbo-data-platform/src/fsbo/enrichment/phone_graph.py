@@ -30,22 +30,27 @@ def count_other_listings(
     exclude_id: int | None = None,
     within_days: int = 30,
 ) -> int:
+    """Count listings within the window whose normalized phone matches.
+
+    Single SELECT pulls (id, seller_phone) for every candidate row; we
+    re-normalize in Python because phones across sources are stored in
+    whatever format the source returned. Previously this issued one
+    `db.get(Listing, id)` per candidate (the N+1 the audit flagged) —
+    one round-trip now regardless of candidate count.
+    """
     normalized = normalize_phone(phone)
     if not normalized:
         return 0
     cutoff = datetime.now(timezone.utc) - timedelta(days=within_days)
-    stmt = select(Listing.id).where(
+    stmt = select(Listing.id, Listing.seller_phone).where(
         Listing.seller_phone.is_not(None),
         Listing.first_seen_at >= cutoff,
     )
     if exclude_id is not None:
         stmt = stmt.where(Listing.id != exclude_id)
-    candidates = db.scalars(stmt).all()
-    # Re-normalize stored phones in-app since we don't want to migrate
-    # historical data. In production we'd add a stored normalized column.
+
     count = 0
-    for lid in candidates:
-        row = db.get(Listing, lid)
-        if row and normalize_phone(row.seller_phone) == normalized:
+    for _id, seller_phone in db.execute(stmt).all():
+        if normalize_phone(seller_phone) == normalized:
             count += 1
     return count
