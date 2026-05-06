@@ -98,6 +98,18 @@ PROTECTED_ENDPOINTS: list[tuple[str, str, dict | None]] = [
     # intentionally NOT in this list — it's the unauth-by-design exchange
     # that the extension hits during install).
     ("POST", "/extension/install-code", None),
+    # Billing (Stripe webhook is signature-verified, NOT in this list)
+    (
+        "POST",
+        "/billing/checkout",
+        {
+            "plan": "starter",
+            "success_url": "https://example.com/ok",
+            "cancel_url": "https://example.com/cancel",
+        },
+    ),
+    ("GET", "/billing/subscription", None),
+    ("POST", "/billing/portal?return_url=https://example.com/", None),
     # Admin
     ("POST", "/admin/rescore", None),
 ]

@@ -25,6 +25,7 @@ dependencies = [
     "email-validator>=2.2",
     "pillow>=11.0",
     "imagehash>=4.3",
+    "stripe>=11.0",
 ]
 
 [project.optional-dependencies]

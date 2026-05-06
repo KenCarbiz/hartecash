@@ -247,6 +247,51 @@ class Dealer(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+    # Stripe billing — denormalized onto Dealer because there's exactly
+    # one customer per dealership. Subscription state lives on the
+    # separate Subscription row so we can keep history of plan changes
+    # + cancellations + reactivations without losing the customer link.
+    stripe_customer_id: Mapped[str | None] = mapped_column(
+        String(64), unique=True, index=True
+    )
+
+
+class Subscription(Base):
+    """A dealer's active (or recently-canceled) Stripe subscription.
+
+    One row per (dealer, stripe_subscription_id). When a dealer
+    upgrades/downgrades, Stripe issues a new sub id; we keep the old
+    row for audit but trust `Subscription.is_active=False + new active
+    row` as the source of truth. Resolved from /billing endpoints by
+    most-recent active row per dealer.
+
+    Status mirrors Stripe's enum: trialing, active, past_due, canceled,
+    unpaid, incomplete, incomplete_expired.
+    """
+
+    __tablename__ = "subscriptions"
+    __table_args__ = (
+        Index("ix_subscriptions_dealer_active", "dealer_id", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    dealer_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    stripe_subscription_id: Mapped[str] = mapped_column(
+        String(64), unique=True, nullable=False
+    )
+    stripe_customer_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    plan: Mapped[str] = mapped_column(String(32), nullable=False)  # starter | pro | performance
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    current_period_end: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    cancel_at_period_end: Mapped[bool] = mapped_column(default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
 
 
 class PasswordResetToken(Base):

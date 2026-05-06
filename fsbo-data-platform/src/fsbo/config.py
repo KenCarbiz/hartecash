@@ -56,5 +56,16 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     smtp_use_tls: bool = True
 
+    # ---- Stripe billing -----------------------------------------------
+    # Empty values disable billing entirely (dev / CI). Webhook secret
+    # MUST be set in production for /webhooks/stripe to do anything.
+    stripe_secret_key: str = ""
+    stripe_webhook_secret: str = ""
+    # Price IDs from the Stripe dashboard. Each plan has one. Fill these
+    # in via env at deploy time.
+    stripe_price_starter: str = ""  # $249/mo
+    stripe_price_pro: str = ""  # $799/mo per rooftop
+    stripe_price_performance: str = ""  # metered: $250/acquisition
+
 
 settings = Settings()
