@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/AppShell";
 import { AssigneeDropdown } from "@/components/AssigneeDropdown";
+import { StaleLeadsPanel } from "@/components/StaleLeadsPanel";
 import {
   type Lead,
   type LeadStatus,
@@ -146,6 +147,8 @@ export default async function LeadsPage({
           Can&apos;t reach the FSBO API. ({error})
         </div>
       )}
+
+      <StaleLeadsPanel />
 
       {!error && leads.length === 0 ? (
         <div className="panel p-12 text-center text-sm text-ink-500">

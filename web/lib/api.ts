@@ -1266,3 +1266,20 @@ export async function getOnboardingChecklist(): Promise<OnboardingChecklist | nu
   if (!res.ok) return null;
   return (await res.json()) as OnboardingChecklist;
 }
+
+// ---- Stale-lead queue (response-SLA breach) ----
+
+export interface StaleLead extends Lead {
+  minutes_since_created: number;
+}
+
+export async function getStaleLeads(
+  slaMinutes = 5,
+  limit = 50,
+): Promise<StaleLead[]> {
+  const res = await apiFetch(
+    `/leads/stale?sla_minutes=${slaMinutes}&limit=${limit}`,
+  );
+  if (!res.ok) return [];
+  return (await res.json()) as StaleLead[];
+}
