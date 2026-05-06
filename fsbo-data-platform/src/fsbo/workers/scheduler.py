@@ -99,6 +99,26 @@ async def _run_vin_vision() -> None:
         log.warning("scheduler.vin_vision_failed", error=str(e))
 
 
+async def _run_plate_vision() -> None:
+    from fsbo.workers.plate_vision_worker import run as run_plate_vision
+
+    try:
+        stats = await run_plate_vision(max_listings=20)
+        log.info("scheduler.plate_vision_done", **stats)
+    except Exception as e:
+        log.warning("scheduler.plate_vision_failed", error=str(e))
+
+
+# Generic source poll wrapper — single-city RSS-style sources don't take
+# args, but we keep the shape consistent so the scheduler config below
+# stays readable.
+async def _poll_simple(source_name: str) -> None:
+    try:
+        await run_poll(source_name)
+    except Exception as e:
+        log.warning("scheduler.poll_failed", source=source_name, error=str(e))
+
+
 async def _run_image_hasher() -> None:
     from fsbo.workers.image_worker import run as run_image_hasher
 
@@ -185,6 +205,32 @@ async def main() -> None:
         max_instances=1,
         coalesce=True,
     )
+
+    # Plate vision — every 15 min, gated on lead_score >= 50 + price >=
+    # $3k. Cheaper than VIN vision (single-photo focus) so we can be
+    # less strict on the candidate filter.
+    scheduler.add_job(
+        _run_plate_vision,
+        IntervalTrigger(minutes=15),
+        id="plate_vision",
+        max_instances=1,
+        coalesce=True,
+    )
+
+    # Niche FSBO sources that have source classes but weren't in the
+    # rotation yet. Each polls every 30 min; one bad source can't kill
+    # the loop because run_poll is wrapped in try/except inside
+    # _poll_simple. Keep frequency conservative — each is a smaller
+    # corpus than craigslist, no point hammering them.
+    for source_name in ("ksl", "privateauto", "hemmings", "bring_a_trailer", "recycler"):
+        scheduler.add_job(
+            _poll_simple,
+            IntervalTrigger(minutes=30),
+            kwargs={"source_name": source_name},
+            id=f"poll_{source_name}",
+            max_instances=1,
+            coalesce=True,
+        )
 
     scheduler.start()
     log.info("scheduler.started", jobs=[j.id for j in scheduler.get_jobs()])
