@@ -49,6 +49,11 @@ class Settings(BaseSettings):
     email_from_name: str = "AutoAcquisition"
 
     sendgrid_api_key: str = ""
+    # Optional shared-secret that SendGrid Inbound Parse must include
+    # as ?token=... when POSTing to /webhooks/email/inbound. Empty
+    # disables the check (dev/CI). Set to a 32+ byte random string
+    # in production.
+    inbound_email_token: str = ""
 
     smtp_host: str = ""
     smtp_port: int = 587

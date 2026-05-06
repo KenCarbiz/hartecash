@@ -1,14 +1,16 @@
-"""SMS send + Twilio webhook endpoints."""
+"""SMS + email send + Twilio + SendGrid Inbound Parse webhook endpoints."""
 
+import re
 from datetime import datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Form, HTTPException
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from fsbo.auth.resolver import DealerId
+from fsbo.config import settings
 from fsbo.config import settings as app_settings
 from fsbo.db import get_session
 from fsbo.messaging.email_client import send_email
@@ -394,3 +396,137 @@ def _digits(phone: str | None) -> str:
     if not phone:
         return ""
     return "".join(c for c in phone if c.isdigit())[-10:]
+
+
+def _email_only(addr: str | None) -> str:
+    """Strip a 'Name <name@host>' header to just the email part."""
+    if not addr:
+        return ""
+    s = addr.strip()
+    if "<" in s and ">" in s:
+        s = s[s.find("<") + 1 : s.find(">")]
+    return s.strip().lower()
+
+
+# ---- Inbound email (SendGrid Inbound Parse webhook) -----------------
+#
+# Configure SendGrid: https://app.sendgrid.com → Settings →
+# Inbound Parse → add hostname (mx record on inbound.autoacquisition.io
+# pointing at SendGrid) → POST URL
+# https://api.autoacquisition.io/webhooks/email/inbound
+#
+# SendGrid posts multipart/form-data with from/to/subject/text/html.
+# We don't validate signatures here — Inbound Parse doesn't sign;
+# protection is via shared-secret query param (FSBO_INBOUND_EMAIL_TOKEN
+# env). Misconfigured deploys silently accept everything in dev/CI.
+
+
+@router.post("/webhooks/email/inbound")
+async def inbound_email(
+    db: Annotated[Session, Depends(get_session)],
+    request: Request,
+) -> dict[str, str]:
+    """SendGrid Inbound Parse target. Routes the email to whichever
+    Lead has a matching seller_email + logs a Message + Interaction
+    + runs the same intent classifier we use for inbound SMS so a
+    "we already sold it" email auto-closes the lead."""
+    # Optional shared-secret on the URL: ?token=...
+    expected_token = settings.inbound_email_token
+    if expected_token:
+        token = request.query_params.get("token")
+        if token != expected_token:
+            raise HTTPException(403, "invalid inbound email token")
+
+    form = await request.form()
+    from_addr = _email_only(str(form.get("from") or ""))
+    to_addr = _email_only(str(form.get("to") or ""))
+    subject = (str(form.get("subject") or "")).strip()[:256]
+    # SendGrid sends the plain-text body as 'text', the HTML version as
+    # 'html'. Prefer text; fall back to html with tags stripped (cheap).
+    body_text = (str(form.get("text") or "")).strip()
+    if not body_text:
+        body_html = str(form.get("html") or "")
+        # Cheap tag strip — for our intent classifier purposes this is fine.
+        body_text = re.sub(r"<[^>]+>", " ", body_html)
+        body_text = re.sub(r"\s+", " ", body_text).strip()
+
+    if not from_addr:
+        return {"ok": "1", "matched": "no_from"}
+
+    # Route to a Lead via Listing.seller_email. Pick the most-recently-
+    # updated lead pointing at a listing with this email — handles the
+    # case where multiple dealers chase the same seller.
+    lead = None
+    rows = db.scalars(
+        select(Lead)
+        .join(Listing, Listing.id == Lead.listing_id)
+        .where(Listing.seller_email == from_addr)
+        .order_by(Lead.updated_at.desc())
+    ).all()
+    if rows:
+        lead = rows[0]
+
+    if not lead:
+        return {"ok": "1", "matched": "none", "from": from_addr}
+
+    db.add(
+        Message(
+            dealer_id=lead.dealer_id,
+            lead_id=lead.id,
+            direction="inbound",
+            channel="email",
+            from_email=from_addr,
+            to_email=to_addr or None,
+            subject=subject or None,
+            body=body_text or "(empty body)",
+            status="received",
+        )
+    )
+    db.add(
+        Interaction(
+            lead_id=lead.id,
+            kind=InteractionKind.EMAIL.value,
+            direction="inbound",
+            body=(f"[{subject}] " if subject else "") + body_text,
+        )
+    )
+    lead.updated_at = datetime.now(timezone.utc)
+
+    # Same intent ladder as inbound SMS — auto-close on sold /
+    # not_for_sale signals so dealers stop chasing dead leads.
+    intent = classify_inbound(body_text)
+    if intent.intent == "sold":
+        listing = db.get(Listing, lead.listing_id)
+        if listing and listing.sold_at is None:
+            listing.sold_at = datetime.now(timezone.utc)
+            listing.sold_signal = body_text[:256]
+            listing.auto_hidden = True
+            listing.auto_hide_reason = (
+                listing.auto_hide_reason
+                or "seller confirmed sold via email"
+            )
+            db.flush()
+        if lead.status not in ("purchased", "lost"):
+            lead.status = "lost"
+            db.add(
+                Interaction(
+                    lead_id=lead.id,
+                    kind=InteractionKind.STATUS_CHANGE.value,
+                    body=f"auto-closed: seller confirmed sold via email ({body_text[:80]})",
+                    actor="system",
+                )
+            )
+    elif intent.intent == "not_for_sale":
+        if lead.status not in ("purchased", "lost"):
+            lead.status = "lost"
+            db.add(
+                Interaction(
+                    lead_id=lead.id,
+                    kind=InteractionKind.STATUS_CHANGE.value,
+                    body=f"auto-closed: seller withdrew via email ({body_text[:80]})",
+                    actor="system",
+                )
+            )
+
+    db.flush()
+    return {"ok": "1", "matched": str(lead.id)}
