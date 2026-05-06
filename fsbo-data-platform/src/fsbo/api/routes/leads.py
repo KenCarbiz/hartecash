@@ -553,10 +553,10 @@ def lead_feed(
     db: Annotated[Session, Depends(get_session)],
     limit: int = 200,
 ) -> UnifiedFeed:
-    """Chronological merge of every Interaction + Message tied to a
-    lead. Newest first. Single endpoint -> single timeline -> dealer
-    sees the whole conversation in one panel rather than tabbing
-    between SMS and notes."""
+    """Chronological merge of every Interaction + Message + VoiceCall
+    tied to a lead. Newest first. Single endpoint -> single timeline ->
+    dealer sees the whole conversation in one panel rather than tabbing
+    between SMS, notes, and call recordings."""
     lead = _require_lead(db, lead_id, dealer_id)
 
     interactions = db.scalars(
@@ -565,12 +565,18 @@ def lead_feed(
         .order_by(Interaction.created_at.desc())
     ).all()
 
-    from fsbo.models import Message  # local import — avoid circulars
+    from fsbo.models import Message, VoiceCall  # local import — avoid circulars
 
     messages = db.scalars(
         select(Message)
         .where(Message.lead_id == lead.id)
         .order_by(Message.created_at.desc())
+    ).all()
+
+    calls = db.scalars(
+        select(VoiceCall)
+        .where(VoiceCall.lead_id == lead.id)
+        .order_by(VoiceCall.created_at.desc())
     ).all()
 
     entries: list[FeedEntry] = []
@@ -597,6 +603,32 @@ def lead_feed(
                 created_at=m.created_at,
                 source_id=m.id,
                 source_table="messages",
+            )
+        )
+    for c in calls:
+        # Body is a one-line summary; the dashboard's voice panel
+        # renders the full transcript via /voice/calls/{id}.
+        seller_turns = sum(
+            1 for t in (c.turns or []) if (t or {}).get("role") == "seller"
+        )
+        duration_s = c.duration_seconds or 0
+        next_step = (c.intake or {}).get("next_step") or ""
+        body_parts = [
+            f"AI voice call · status={c.status}",
+            f"{seller_turns} seller turns" if seller_turns else None,
+            f"{duration_s}s" if duration_s else None,
+            f"next: {next_step}" if next_step else None,
+        ]
+        entries.append(
+            FeedEntry(
+                kind="voice_call",
+                direction="outbound",
+                body=" · ".join(p for p in body_parts if p),
+                actor=None,
+                delivery_status=c.status,
+                created_at=c.created_at,
+                source_id=c.id,
+                source_table="voice_calls",
             )
         )
 

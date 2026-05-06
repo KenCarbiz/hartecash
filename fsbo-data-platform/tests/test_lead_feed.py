@@ -2,7 +2,14 @@
 
 from datetime import datetime, timedelta, timezone
 
-from fsbo.models import Interaction, InteractionKind, Lead, Listing, Message
+from fsbo.models import (
+    Interaction,
+    InteractionKind,
+    Lead,
+    Listing,
+    Message,
+    VoiceCall,
+)
 
 
 def _seed(db_session):
@@ -119,6 +126,53 @@ def test_feed_empty_for_brand_new_lead(client, db_session):
     body = client.get(f"/leads/{lead.id}/feed").json()
     assert body["lead_id"] == lead.id
     assert body["entries"] == []
+
+
+def test_feed_includes_voice_calls(client, db_session):
+    lead = _seed(db_session)
+    base = datetime.now(timezone.utc)
+
+    # One SMS, one voice call — voice call should show up between them.
+    db_session.add(
+        Message(
+            dealer_id="demo-dealer",
+            lead_id=lead.id,
+            direction="outbound",
+            to_number="8135551234",
+            body="Hi",
+            status="delivered",
+            created_at=base - timedelta(minutes=15),
+        )
+    )
+    db_session.add(
+        VoiceCall(
+            lead_id=lead.id,
+            dealer_id="demo-dealer",
+            to_number="8135551234",
+            status="completed",
+            duration_seconds=92,
+            turns=[
+                {"role": "ai", "text": "Hi"},
+                {"role": "seller", "text": "Yes still available"},
+                {"role": "seller", "text": "$18000"},
+            ],
+            intake={"next_step": "appointment"},
+            created_at=base - timedelta(minutes=10),
+        )
+    )
+    db_session.flush()
+
+    body = client.get(f"/leads/{lead.id}/feed").json()
+    voice_entries = [e for e in body["entries"] if e["kind"] == "voice_call"]
+    assert len(voice_entries) == 1
+    v = voice_entries[0]
+    assert v["delivery_status"] == "completed"
+    assert "2 seller turns" in v["body"]
+    assert "92s" in v["body"]
+    assert "next: appointment" in v["body"]
+    # Newest-first ordering preserved
+    kinds = [e["kind"] for e in body["entries"]]
+    assert kinds == ["voice_call", "message:outbound"]
 
 
 def test_feed_caps_at_limit(client, db_session):

@@ -8,11 +8,14 @@ import { MarketBadge } from "@/components/MarketBadge";
 import { ConditionPanel } from "@/components/ConditionPanel";
 import { PlateChip, VehicleFactsEditor } from "@/components/VehicleFactsEditor";
 import { QualityPanel } from "@/components/QualityPanel";
+import { UnifiedFeedPanel } from "@/components/UnifiedFeedPanel";
 import { VehicleFilePanel } from "@/components/VehicleFilePanel";
+import { VoiceCallPanel } from "@/components/VoiceCallPanel";
 import {
   formatMileage,
   formatPrice,
   formatRelativeDate,
+  getLeadFeed,
   getLeadForListing,
   getListing,
   getListingStats,
@@ -21,6 +24,7 @@ import {
   listInteractions,
   listTeammates,
   listTemplates,
+  listVoiceCalls,
 } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
@@ -79,15 +83,25 @@ export default async function ListingDetailPage({
   ]);
   if (!listing) notFound();
 
-  const [interactions, templates, teammates, vehicleFile, market, stats] =
-    await Promise.all([
-      lead ? listInteractions(lead.id).catch(() => []) : Promise.resolve([]),
-      listTemplates().catch(() => []),
-      listTeammates().catch(() => []),
-      getVehicleFile(listingId).catch(() => null),
-      getMarketEstimate(listingId).catch(() => null),
-      getListingStats(listingId).catch(() => null),
-    ]);
+  const [
+    interactions,
+    templates,
+    teammates,
+    vehicleFile,
+    market,
+    stats,
+    feed,
+    voiceCalls,
+  ] = await Promise.all([
+    lead ? listInteractions(lead.id).catch(() => []) : Promise.resolve([]),
+    listTemplates().catch(() => []),
+    listTeammates().catch(() => []),
+    getVehicleFile(listingId).catch(() => null),
+    getMarketEstimate(listingId).catch(() => null),
+    getListingStats(listingId).catch(() => null),
+    lead ? getLeadFeed(lead.id).catch(() => []) : Promise.resolve([]),
+    lead ? listVoiceCalls(lead.id).catch(() => []) : Promise.resolve([]),
+  ]);
 
   const vehicleLine = [listing.year, listing.make, listing.model, listing.trim]
     .filter(Boolean)
@@ -288,6 +302,12 @@ export default async function ListingDetailPage({
             file={vehicleFile}
             primaryListingId={listing.id}
           />
+
+          {/* Unified per-lead activity feed: voice calls, SMS, notes,
+              status changes — chronological. The "messaging hub" VAN
+              ships in their Lincoln Park release, with our voice-call
+              + intake-summary entries folded in. */}
+          {lead && <UnifiedFeedPanel entries={feed} />}
         </div>
 
         <div className="lg:col-span-1 space-y-3">
@@ -301,6 +321,12 @@ export default async function ListingDetailPage({
             lead={lead}
             interactions={interactions}
             teammates={teammates}
+          />
+          <VoiceCallPanel
+            leadId={lead?.id ?? null}
+            listingId={listing.id}
+            sellerPhone={listing.seller_phone}
+            calls={voiceCalls}
           />
           {lead && (
             <ComposePanel

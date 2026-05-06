@@ -965,3 +965,92 @@ export async function openBillingPortal(returnUrl: string): Promise<string> {
   const body = (await res.json()) as { url: string };
   return body.url;
 }
+
+// ---------- unified per-lead feed ----------
+
+export interface FeedEntry {
+  kind: string; // "interaction:note" | "message:outbound" | "voice_call" | ...
+  direction: "outbound" | "inbound" | null;
+  body: string | null;
+  actor: string | null;
+  delivery_status?: string | null;
+  created_at: string;
+  source_id: number;
+  source_table: "interactions" | "messages" | "voice_calls";
+}
+
+export async function getLeadFeed(leadId: number): Promise<FeedEntry[]> {
+  const res = await apiFetch(`/leads/${leadId}/feed`);
+  if (!res.ok) return [];
+  const body = (await res.json()) as { lead_id: number; entries: FeedEntry[] };
+  return body.entries;
+}
+
+// ---------- AI voice agent ----------
+
+export interface VoiceCallTurn {
+  role: "ai" | "seller";
+  text: string;
+  at?: string;
+}
+
+export interface SellerIntake {
+  mileage_confirmed?: number | null;
+  asking_price_floor?: number | null;
+  title_status?: "in_hand" | "lien_on_it" | "lost" | "in_mail" | "unknown";
+  lien_balance?: number | null;
+  drivable?: "yes" | "no" | "unknown";
+  accidents_disclosed?: string[];
+  mechanical_issues?: string[];
+  body_damage_disclosed?: string[];
+  aftermarket_mods?: string[];
+  keys_count?: number | null;
+  willing_to_meet_when?: string;
+  location_for_inspection?: string;
+  motivation_level?: "high" | "medium" | "low" | "unknown";
+  motivation_reason?: string;
+  next_step?: "appointment" | "callback" | "ghost" | "no_deal" | string;
+}
+
+export interface VoiceCall {
+  id: number;
+  lead_id: number;
+  status: string;
+  to_number: string;
+  duration_seconds: number | null;
+  turns: VoiceCallTurn[];
+  intake: SellerIntake;
+  created_at: string;
+}
+
+export interface StartVoiceCallResult {
+  call_id: number;
+  twilio_call_sid: string | null;
+  status: string;
+}
+
+export async function startVoiceCall(
+  leadId: number,
+  toNumber?: string,
+): Promise<StartVoiceCallResult> {
+  const res = await apiFetch("/voice/calls", {
+    method: "POST",
+    body: JSON.stringify({ lead_id: leadId, to_number: toNumber ?? null }),
+  });
+  if (!res.ok) {
+    throw new FsboApiError(`FSBO API ${res.status}`, res.status, await res.text());
+  }
+  return (await res.json()) as StartVoiceCallResult;
+}
+
+export async function listVoiceCalls(leadId: number): Promise<VoiceCall[]> {
+  const res = await apiFetch(`/leads/${leadId}/voice-calls`);
+  if (!res.ok) return [];
+  return (await res.json()) as VoiceCall[];
+}
+
+export async function getVoiceCall(callId: number): Promise<VoiceCall | null> {
+  const res = await apiFetch(`/voice/calls/${callId}`);
+  if (!res.ok) return null;
+  return (await res.json()) as VoiceCall;
+}
