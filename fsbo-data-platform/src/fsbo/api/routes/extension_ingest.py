@@ -446,6 +446,17 @@ async def ingest(
     row.auto_hidden = q.auto_hide
     row.auto_hide_reason = q.auto_hide_reason
 
+    # Fire listing.created webhooks (best-effort). Auto-hidden rows
+    # don't fire — those are scams/curbstoners and we don't want
+    # downstream DMS systems flooded with junk.
+    if not row.auto_hidden:
+        from fsbo.webhooks.delivery import enqueue_for_listing
+
+        try:
+            enqueue_for_listing(db, row)
+        except Exception:  # noqa: BLE001
+            pass
+
     # Mirror FB CDN photos in the background (URLs expire ~24h).
     if norm.images:
         background.add_task(_schedule_mirror, row.id, list(norm.images))

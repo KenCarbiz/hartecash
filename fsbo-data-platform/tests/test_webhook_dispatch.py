@@ -231,6 +231,47 @@ def test_voice_call_completed_fires_webhook(client, db_session):
     assert deliveries[0].payload["voice_call"]["duration_seconds"] == 120
 
 
+def test_extension_ingest_fires_listing_created(client, db_session):
+    """A FB Marketplace listing arriving via the extension fires
+    listing.created to subscribed dealers. Auto-hidden listings
+    (scams/curbstoners) don't fire — keeps DMS feeds clean."""
+    db_session.add(
+        WebhookSubscription(
+            dealer_id="demo-dealer",
+            name="hook",
+            url="https://example.com/hook",
+            secret="s",
+            event="listing.created",
+            active=True,
+        )
+    )
+    db_session.flush()
+
+    r = client.post(
+        "/sources/extension/ingest",
+        json={
+            "listing": {
+                "source": "facebook_marketplace",
+                "external_id": "fb-listing-created-1",
+                "url": "https://www.facebook.com/marketplace/item/1",
+                "title": "2018 Honda Accord",
+                "year": 2018,
+                "make": "Honda",
+                "model": "Accord",
+                "price": 18500,
+                "city": "Tampa",
+                "state": "FL",
+            }
+        },
+    )
+    assert r.status_code == 200
+
+    deliveries = db_session.scalars(
+        select(WebhookDelivery).where(WebhookDelivery.event == "listing.created")
+    ).all()
+    assert len(deliveries) == 1
+
+
 def test_voice_call_busy_does_not_fire(client, db_session):
     lead = _seed_lead(db_session)
     db_session.add(
