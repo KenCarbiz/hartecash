@@ -45,6 +45,11 @@ PROTECTED_ENDPOINTS: list[tuple[str, str, dict | None]] = [
     ("GET", "/leads/export.csv", None),
     # Messages
     ("POST", "/messages/send", {"lead_id": 1, "body": "hi"}),
+    (
+        "POST",
+        "/messages/email/send",
+        {"lead_id": 1, "subject": "Hi", "body": "Hello"},
+    ),
     ("GET", "/leads/1/messages", None),
     # Templates
     ("GET", "/templates", None),

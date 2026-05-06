@@ -650,11 +650,21 @@ def lead_feed(
             )
         )
     for m in messages:
+        # Emails ride the same Message rows as SMS but carry a channel
+        # marker + subject; surface the subject inline so the dashboard
+        # timeline reads naturally without forking the kind enum.
+        channel = getattr(m, "channel", "sms") or "sms"
+        body = m.body
+        subject = getattr(m, "subject", None)
+        if channel == "email" and subject:
+            body = f"[email · {subject}]\n{m.body}"
+        elif channel == "email":
+            body = f"[email]\n{m.body}"
         entries.append(
             FeedEntry(
                 kind=f"message:{m.direction}",
                 direction=m.direction,
-                body=m.body,
+                body=body,
                 actor=None,
                 delivery_status=m.status,
                 created_at=m.created_at,

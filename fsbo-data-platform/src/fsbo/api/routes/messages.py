@@ -9,7 +9,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from fsbo.auth.resolver import DealerId
+from fsbo.config import settings as app_settings
 from fsbo.db import get_session
+from fsbo.messaging.email_client import send_email
 from fsbo.messaging.intent import classify_inbound
 from fsbo.messaging.tcpa import (
     check_send_allowed,
@@ -43,11 +45,15 @@ class MessageOut(BaseModel):
     dealer_id: str
     lead_id: int | None
     direction: str
-    from_number: str | None
-    to_number: str | None
+    channel: str = "sms"
+    from_number: str | None = None
+    to_number: str | None = None
+    from_email: str | None = None
+    to_email: str | None = None
+    subject: str | None = None
     body: str
     status: str
-    twilio_sid: str | None
+    twilio_sid: str | None = None
     created_at: datetime
     delivered_at: datetime | None
 
@@ -121,6 +127,112 @@ async def send(
         twilio_sid=result.sid,
         status=result.status,
         error=result.error_message,
+    )
+
+
+# ---- Email outreach -------------------------------------------------
+
+
+class SendEmailIn(BaseModel):
+    lead_id: int
+    subject: str
+    body: str
+    to_email: str | None = None  # override listing.seller_email if provided
+
+
+class SendEmailOut(BaseModel):
+    message_id: int
+    backend: str
+    sent: bool
+    error: str | None
+
+
+@router.post("/messages/email/send", response_model=SendEmailOut)
+async def send_email_to_seller(
+    payload: SendEmailIn,
+    dealer_id: DealerId,
+    db: Annotated[Session, Depends(get_session)],
+) -> SendEmailOut:
+    """Send an email to the lead's seller via the configured email
+    backend (SendGrid / SMTP / console). Email is governed by CAN-SPAM
+    + state spam laws — we don't enforce a quiet-hours window because
+    email isn't time-sensitive in the same way SMS is, but we DO
+    honor the SMS opt-out registry: if the seller texted STOP, we
+    refuse to email them too. Aggressive on purpose.
+    """
+    lead = db.get(Lead, payload.lead_id)
+    if not lead or lead.dealer_id != dealer_id:
+        raise HTTPException(404, "lead not found")
+
+    listing = db.get(Listing, lead.listing_id)
+    to = (payload.to_email or "").strip()
+    if not to and listing:
+        to = (listing.seller_email or "").strip()
+    if not to or "@" not in to:
+        raise HTTPException(
+            400, "no destination email on lead's listing"
+        )
+
+    # Honor the SMS opt-out registry as a "do not contact" signal even
+    # for email. A seller who said STOP doesn't want to hear from us
+    # on any channel.
+    if listing and listing.seller_phone:
+        gate = check_send_allowed(
+            db,
+            dealer_id=dealer_id,
+            phone=listing.seller_phone,
+            zip_code=listing.zip_code,
+        )
+        if gate.blocked_reason == "opted_out":
+            db.add(
+                Interaction(
+                    lead_id=lead.id,
+                    kind=InteractionKind.NOTE.value,
+                    body=f"email blocked: opted_out (carries over from SMS)",
+                    actor=dealer_id,
+                )
+            )
+            raise HTTPException(
+                status_code=451,
+                detail="email blocked: opted_out — seller previously sent STOP",
+            )
+
+    result = await send_email(
+        to=to,
+        subject=payload.subject,
+        text_body=payload.body,
+        from_address=app_settings.email_from or None,
+    )
+
+    msg = Message(
+        dealer_id=dealer_id,
+        lead_id=lead.id,
+        direction="outbound",
+        channel="email",
+        from_email=app_settings.email_from or None,
+        to_email=to,
+        subject=payload.subject[:256],
+        body=payload.body,
+        status="sent" if result.sent else "failed",
+        error_code=result.error[:32] if result.error else None,
+    )
+    db.add(msg)
+    db.add(
+        Interaction(
+            lead_id=lead.id,
+            kind=InteractionKind.EMAIL.value,
+            direction="outbound",
+            body=payload.body,
+        )
+    )
+    lead.updated_at = datetime.now(timezone.utc)
+    db.flush()
+
+    return SendEmailOut(
+        message_id=msg.id,
+        backend=result.backend,
+        sent=result.sent,
+        error=result.error,
     )
 
 

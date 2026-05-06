@@ -134,6 +134,7 @@ class Listing(Base):
 
     seller_name: Mapped[str | None] = mapped_column(String(256))
     seller_phone: Mapped[str | None] = mapped_column(String(32), index=True)
+    seller_email: Mapped[str | None] = mapped_column(String(256), index=True)
     # Marketplace-specific seller signals. profile_url + joined_year are
     # FB-Marketplace specifics that feed the curbstoner scorer; both are
     # optional and may be null for non-FB sources.
@@ -512,7 +513,9 @@ class ExtensionInstallCode(Base):
 
 
 class Message(Base):
-    """Outbound/inbound SMS tied to a lead. Wraps Twilio's Message resource."""
+    """Outbound / inbound message tied to a lead. Originally just SMS
+    (wrapping Twilio's Message resource); now also covers email when
+    channel="email"."""
 
     __tablename__ = "messages"
     __table_args__ = (
@@ -524,8 +527,19 @@ class Message(Base):
     dealer_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     lead_id: Mapped[int | None] = mapped_column(Integer)
     direction: Mapped[str] = mapped_column(String(16), nullable=False)
+    # "sms" (default) | "email". Distinguishes the transport so the
+    # unified feed can render different glyphs and the dashboard can
+    # filter to one channel.
+    channel: Mapped[str] = mapped_column(
+        String(16), default="sms", nullable=False
+    )
+    # SMS leg
     from_number: Mapped[str | None] = mapped_column(String(32))
     to_number: Mapped[str | None] = mapped_column(String(32))
+    # Email leg (null for SMS rows)
+    from_email: Mapped[str | None] = mapped_column(String(256))
+    to_email: Mapped[str | None] = mapped_column(String(256))
+    subject: Mapped[str | None] = mapped_column(String(256))
     body: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(String(32), default="queued", nullable=False)
     error_code: Mapped[str | None] = mapped_column(String(32))
