@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -791,7 +791,7 @@ def serve_mirrored_image(
     idx: int,
     dealer_id: DealerId,
     db: Annotated[Session, Depends(get_session)],
-) -> FileResponse:
+) -> Response:
     """Serve a mirrored copy of one of this listing's photos.
 
     The dashboard renders <img src="/listings/123/image/0"> rather than
@@ -805,10 +805,7 @@ def serve_mirrored_image(
     keys = list(row.mirrored_images or [])
     if idx < 0 or idx >= len(keys):
         raise HTTPException(404, "image not found")
-    path = media_mirror.local_path(keys[idx])
-    if not path.exists():
-        raise HTTPException(404, "image missing on disk")
-    return FileResponse(path, media_type="image/jpeg")
+    return media_mirror.serve_image(keys[idx])
 
 
 # -- Telemetry --------------------------------------------------------------

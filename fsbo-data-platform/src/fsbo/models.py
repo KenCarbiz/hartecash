@@ -543,6 +543,62 @@ class Lead(Base):
     seller_intake: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
 
 
+class Offer(Base):
+    """A dealer's firm cash offer to a seller, with a public token the
+    seller can use to view + accept on a clean, branded page (no
+    login required).
+
+    The contrarian wedge: every other tool in this category is built
+    dealer-side. The seller-facing surface here gives the seller a
+    transparent, trackable offer with line-item deductions ("$300 off
+    for the 2022 Carfax accident"), a countdown to expiry, and a
+    one-tap accept button. Sellers who *understand* the offer accept
+    it 2-3x more often.
+    """
+
+    __tablename__ = "offers"
+    __table_args__ = (
+        Index("ix_offers_lead_created", "lead_id", "created_at"),
+        Index("ix_offers_dealer_id", "dealer_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    public_token: Mapped[str] = mapped_column(
+        String(64), unique=True, nullable=False, index=True
+    )
+    dealer_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    lead_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    listing_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    amount_cents: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Line-item deductions: each entry is
+    # {"label": "Carfax accident 2022", "amount_cents": -30000}
+    # Positive entries are bumps (e.g. "Records bonus"); negatives are
+    # deductions. The dashboard / seller page render them line by line
+    # so the offer is explainable.
+    breakdown: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text)
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    # State machine: "pending" -> "accepted" | "declined" | "expired" | "withdrawn"
+    status: Mapped[str] = mapped_column(
+        String(16), default="pending", nullable=False, index=True
+    )
+    seller_response_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    seller_response_note: Mapped[str | None] = mapped_column(Text)
+    seller_viewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class VoiceCall(Base):
     """One row per outbound voice call to a seller.
 

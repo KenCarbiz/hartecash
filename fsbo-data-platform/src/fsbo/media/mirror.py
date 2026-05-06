@@ -1,4 +1,4 @@
-"""Mirror Facebook Marketplace photos to local storage before they expire.
+"""Mirror Facebook Marketplace photos to durable storage before they expire.
 
 FB serves listing photos from `scontent-*.fbcdn.net` and `*.fbcdn.net`.
 Two problems for us:
@@ -10,9 +10,9 @@ Two problems for us:
      pulling images cold gets blocked.
 
 Solution: when the extension ingests a FB listing, queue a mirror job
-that downloads each image with the right Referer and writes it to
-local storage (today: filesystem; tomorrow: S3-compatible object
-store via the same interface).
+that downloads each image with the right Referer and writes it via the
+configured storage backend (local FS for dev, S3-compatible in prod —
+see fsbo.media.storage).
 
 The proxy route `/listings/{id}/image/{idx}` serves the mirrored copy.
 The original URL stays in `Listing.images` as a fallback for non-FB
@@ -28,10 +28,15 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import httpx
+from fastapi.responses import Response
+
+from fsbo.media.storage import LocalFsStorage, MediaStorage, make_storage
 
 logger = logging.getLogger(__name__)
 
-# Configurable via env. Defaults to ./var/images so dev "just works".
+# Kept for back-compat: tests monkeypatch this attribute and expect
+# writes to land under it. The active backend is computed per-call so
+# the monkeypatch always wins.
 MIRROR_ROOT = Path(os.environ.get("FSBO_MEDIA_ROOT", "var/images"))
 
 # Hosts whose images we MUST mirror (URLs expire). For other sources we
@@ -43,6 +48,19 @@ MUST_MIRROR_HOSTS = (
 )
 
 
+def _storage() -> MediaStorage:
+    """Resolve the active backend. When FSBO_MEDIA_BACKEND=s3 + bucket
+    env is configured, use S3; otherwise local FS rooted at MIRROR_ROOT
+    (which tests monkeypatch). No caching — keeps test isolation tight
+    and the cost is negligible.
+    """
+    backend = make_storage()
+    if isinstance(backend, LocalFsStorage):
+        # Honor the test-mode monkeypatch on MIRROR_ROOT.
+        return LocalFsStorage(MIRROR_ROOT)
+    return backend
+
+
 def must_mirror(url: str) -> bool:
     try:
         host = urlparse(url).hostname or ""
@@ -52,34 +70,41 @@ def must_mirror(url: str) -> bool:
 
 
 def storage_key(url: str) -> str:
-    """Stable, deterministic on-disk key for a given image URL.
+    """Stable, deterministic key for a given image URL.
 
     Hash the URL minus its expiring query string, so re-ingest of the
-    same photo from a different signed URL hits the same file.
+    same photo from a different signed URL hits the same key.
     """
     parsed = urlparse(url)
     canon = f"{parsed.netloc}{parsed.path}"
     digest = hashlib.sha256(canon.encode("utf-8")).hexdigest()
-    # Two-level fanout to keep directories small at scale.
+    # Two-level fanout to keep directories / S3 prefixes small at scale.
     return f"{digest[:2]}/{digest[2:4]}/{digest}.jpg"
 
 
 def local_path(key: str) -> Path:
+    """Disk path for the local-FS backend. Kept for tests that inspect
+    the on-disk layout directly. Returns a path even when the active
+    backend is S3 — caller is expected to know which backend is on."""
     return MIRROR_ROOT / key
 
 
 def is_mirrored(url: str) -> bool:
-    return local_path(storage_key(url)).exists()
+    return _storage().exists(storage_key(url))
+
+
+def serve_image(key: str) -> Response:
+    """Backend-agnostic image serve. Used by the proxy route."""
+    return _storage().serve(key)
 
 
 def mirror_one(url: str, *, timeout: float = 8.0) -> str | None:
-    """Download `url` and write it under MIRROR_ROOT. Returns the storage
-    key on success, None on failure. Idempotent: if the file already
-    exists, skips the network call.
-    """
+    """Download `url` and write via the active storage backend.
+    Returns the storage key on success, None on failure. Idempotent:
+    if the key already exists, skips the network call."""
     key = storage_key(url)
-    dest = local_path(key)
-    if dest.exists():
+    storage = _storage()
+    if storage.exists(key):
         return key
 
     headers = {
@@ -103,8 +128,7 @@ def mirror_one(url: str, *, timeout: float = 8.0) -> str | None:
         # FB sometimes returns a 1x1 spacer GIF on token expiry.
         return None
 
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_bytes(body)
+    storage.put(key, body)
     return key
 
 

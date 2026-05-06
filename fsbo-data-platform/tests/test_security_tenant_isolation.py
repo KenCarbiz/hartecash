@@ -122,6 +122,12 @@ PROTECTED_ENDPOINTS: list[tuple[str, str, dict | None]] = [
     ("POST", "/voice/calls", {"lead_id": 1}),
     ("GET", "/voice/calls/1", None),
     ("GET", "/leads/1/voice-calls", None),
+    # Offers (dealer-side; public token endpoints are intentionally NOT
+    # in this list — they're the seller-facing surface and should work
+    # without auth)
+    ("POST", "/offers", {"lead_id": 1, "amount_cents": 1500000}),
+    ("GET", "/offers/by-lead/1", None),
+    ("POST", "/offers/1/withdraw", None),
     # Admin
     ("POST", "/admin/rescore", None),
 ]

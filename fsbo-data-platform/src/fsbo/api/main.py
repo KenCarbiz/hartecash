@@ -15,6 +15,7 @@ from fsbo.api.routes import (
     listings,
     messages,
     notifications,
+    offers,
     saved_searches,
     source_health,
     tcpa,
@@ -77,6 +78,7 @@ app.include_router(analytics.router)
 app.include_router(billing.router)
 app.include_router(tcpa.router)
 app.include_router(voice.router)
+app.include_router(offers.router)
 
 
 @app.get("/health")

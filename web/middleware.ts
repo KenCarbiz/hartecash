@@ -8,6 +8,7 @@ const PUBLIC_PREFIXES = [
   "/invite",
   "/forgot-password",
   "/reset-password",
+  "/o/", // seller-facing offer pages — token-protected on the API
   "/_next",
   "/favicon",
 ];

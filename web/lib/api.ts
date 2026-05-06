@@ -1102,3 +1102,114 @@ export async function refreshHistoryReport(
   }
   return (await res.json()) as HistoryReport;
 }
+
+// ---------- offers ----------
+
+export interface OfferBreakdownLine {
+  label: string;
+  amount_cents: number;
+}
+
+export interface DealerOffer {
+  id: number;
+  public_token: string;
+  lead_id: number;
+  listing_id: number;
+  amount_cents: number;
+  breakdown: OfferBreakdownLine[];
+  notes: string | null;
+  expires_at: string;
+  status: "pending" | "accepted" | "declined" | "expired" | "withdrawn";
+  seller_response_at: string | null;
+  seller_response_note: string | null;
+  seller_viewed_at: string | null;
+  created_at: string;
+}
+
+export interface PublicOffer {
+  public_token: string;
+  amount_cents: number;
+  breakdown: OfferBreakdownLine[];
+  notes: string | null;
+  expires_at: string;
+  expires_in_seconds: number;
+  status: "pending" | "accepted" | "declined" | "expired" | "withdrawn";
+  vehicle_label: string;
+  dealer_name: string | null;
+  photos: string[];
+}
+
+export async function createOffer(input: {
+  lead_id: number;
+  amount_cents: number;
+  breakdown?: OfferBreakdownLine[];
+  notes?: string | null;
+  valid_hours?: number;
+}): Promise<DealerOffer> {
+  const res = await apiFetch("/offers", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+  if (!res.ok)
+    throw new FsboApiError(`FSBO API ${res.status}`, res.status, await res.text());
+  return (await res.json()) as DealerOffer;
+}
+
+export async function listOffersForLead(leadId: number): Promise<DealerOffer[]> {
+  const res = await apiFetch(`/offers/by-lead/${leadId}`);
+  if (!res.ok) return [];
+  return (await res.json()) as DealerOffer[];
+}
+
+export async function withdrawOffer(offerId: number): Promise<DealerOffer> {
+  const res = await apiFetch(`/offers/${offerId}/withdraw`, { method: "POST" });
+  if (!res.ok)
+    throw new FsboApiError(`FSBO API ${res.status}`, res.status, await res.text());
+  return (await res.json()) as DealerOffer;
+}
+
+/** Public-token endpoints — no auth, called from the seller-facing
+ *  offer page. Server-side only because the public page renders on
+ *  the server. */
+export async function getPublicOffer(token: string): Promise<PublicOffer | null> {
+  const url = `${BASE_URL.replace(/\/$/, "")}/offers/public/${encodeURIComponent(token)}`;
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) return null;
+  return (await res.json()) as PublicOffer;
+}
+
+export async function publicAcceptOffer(
+  token: string,
+  note: string | null = null,
+): Promise<PublicOffer> {
+  const url = `${BASE_URL.replace(/\/$/, "")}/offers/public/${encodeURIComponent(
+    token,
+  )}/accept`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ note }),
+    cache: "no-store",
+  });
+  if (!res.ok)
+    throw new FsboApiError(`FSBO API ${res.status}`, res.status, await res.text());
+  return (await res.json()) as PublicOffer;
+}
+
+export async function publicDeclineOffer(
+  token: string,
+  note: string | null = null,
+): Promise<PublicOffer> {
+  const url = `${BASE_URL.replace(/\/$/, "")}/offers/public/${encodeURIComponent(
+    token,
+  )}/decline`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ note }),
+    cache: "no-store",
+  });
+  if (!res.ok)
+    throw new FsboApiError(`FSBO API ${res.status}`, res.status, await res.text());
+  return (await res.json()) as PublicOffer;
+}
