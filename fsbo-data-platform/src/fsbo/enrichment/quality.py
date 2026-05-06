@@ -232,6 +232,47 @@ def score_listing(
     if posting_hour_score:
         bd["posting_hours"] = posting_hour_score
 
+    # --- AI condition assessment (Claude vision over photos) ---
+    # Pulled from listing.condition (set by extension_ingest._schedule_vision).
+    # Heavy positive for "excellent", penalty for "heavy" body damage so a
+    # nice-looking listing with a wrecked truck in the photos doesn't sneak
+    # through on text signals alone. Skipped entirely when no photos were
+    # checked (vision hasn't run yet).
+    cond = getattr(listing, "condition", None) or {}
+    if isinstance(cond, dict) and cond.get("checked_images"):
+        overall = cond.get("overall")
+        body_damage = cond.get("body_damage")
+        flags = cond.get("flags") or []
+
+        if overall == "excellent":
+            bd["condition_overall"] = 8
+        elif overall == "good":
+            bd["condition_overall"] = 4
+        elif overall == "fair":
+            bd["condition_overall"] = -2
+        elif overall == "poor":
+            bd["condition_overall"] = -10
+
+        if body_damage == "heavy":
+            bd["condition_body_damage"] = -15
+            auto_hide_reason = auto_hide_reason or "heavy body damage in photos"
+        elif body_damage == "moderate":
+            bd["condition_body_damage"] = -8
+        elif body_damage == "cosmetic":
+            bd["condition_body_damage"] = -2
+
+        # Specific damage tags that warrant a small extra ding.
+        bad_tags = {
+            "rust",
+            "cracked_windshield",
+            "fresh_scrape",
+            "damaged_bumper",
+            "misaligned_panel",
+        }
+        flag_hits = [f for f in flags if f in bad_tags]
+        if flag_hits:
+            bd["condition_flags"] = -3 * min(len(flag_hits), 3)
+
     # --- Confirmed title brand (paid NMVTIS check) ---
     if title_brand:
         if title_brand in ("junk", "theft_reported"):

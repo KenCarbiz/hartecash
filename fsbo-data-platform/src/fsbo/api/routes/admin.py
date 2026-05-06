@@ -1,8 +1,9 @@
 """Admin endpoints for operational tasks.
 
 These mutate global state (e.g. recomputing scores across every listing)
-so they require authentication. Role-scoped admin gating (only users
-with role=admin can hit /admin/*) is the next hardening step.
+so they require an authenticated user with role=admin. The cookie-only
+admin gate refuses API-key callers and the X-Dealer-Id dev fallback —
+only a real signed-in admin user is allowed.
 """
 
 from datetime import datetime, timezone
@@ -13,7 +14,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from fsbo.auth.resolver import DealerId
+from fsbo.auth.resolver import AdminUser
 from fsbo.db import get_session
 from fsbo.enrichment.attributes import extract as extract_attrs
 from fsbo.enrichment.authenticity import score_authenticity
@@ -34,7 +35,7 @@ class RescoreOut(BaseModel):
 
 @router.post("/rescore", response_model=RescoreOut)
 def rescore_all(
-    dealer_id: DealerId,
+    admin: AdminUser,
     db: Annotated[Session, Depends(get_session)],
     refresh_signals: bool = True,
 ) -> RescoreOut:
@@ -42,7 +43,7 @@ def rescore_all(
     lead_quality_score for every listing. Useful after the scoring formula
     changes. Rescore is idempotent and safe to re-run.
     """
-    _ = dealer_id  # auth-only; no per-dealer scoping
+    _ = admin  # admin role enforced by AdminUser dependency
     now = datetime.now(timezone.utc)
     rows = db.scalars(select(Listing)).all()
     updated = 0

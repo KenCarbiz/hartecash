@@ -12,12 +12,14 @@ from spoofing a dealer ID.
 from typing import Annotated
 
 from fastapi import Depends, Header, HTTPException, Request
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from fsbo.auth.api_key_resolver import resolve_dealer_from_token
 from fsbo.auth.tokens import SESSION_COOKIE_NAME, verify
 from fsbo.config import settings
 from fsbo.db import get_session
+from fsbo.models import User
 
 
 def _token_from_request(request: Request) -> str | None:
@@ -55,3 +57,31 @@ def resolve_dealer_id(
 
 
 DealerId = Annotated[str, Depends(resolve_dealer_id)]
+
+
+def require_admin(
+    request: Request,
+    db: Annotated[Session, Depends(get_session)],
+) -> User:
+    """Cookie-only admin gate.
+
+    Admin actions are mutating + global (e.g. /admin/rescore touches every
+    listing). API-key callers and the X-Dealer-Id dev fallback are NOT
+    accepted — only a real session belonging to a user with role=admin.
+    """
+    session_cookie = request.cookies.get(SESSION_COOKIE_NAME)
+    if not session_cookie:
+        raise HTTPException(status_code=401, detail="authentication required")
+    claims = verify(session_cookie)
+    if not claims or not claims.get("sub"):
+        raise HTTPException(status_code=401, detail="invalid session")
+
+    user = db.scalar(select(User).where(User.id == int(claims["sub"])))
+    if not user or not user.is_active:
+        raise HTTPException(status_code=401, detail="user not found")
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="admin role required")
+    return user
+
+
+AdminUser = Annotated[User, Depends(require_admin)]

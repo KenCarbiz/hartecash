@@ -300,6 +300,7 @@ def list_leads(
     db: Annotated[Session, Depends(get_session)],
     status: LeadStatus | None = None,
     assigned_to: str | None = None,
+    include_archived: bool = False,
     limit: int = 100,
     offset: int = 0,
 ) -> list[LeadWithListing]:
@@ -308,6 +309,8 @@ def list_leads(
         .join(Listing, Lead.listing_id == Listing.id)
         .where(Lead.dealer_id == dealer_id)
     )
+    if not include_archived:
+        stmt = stmt.where(Lead.deleted_at.is_(None))
     if status:
         stmt = stmt.where(Lead.status == status.value)
     if assigned_to:
@@ -397,6 +400,74 @@ def update_lead(
     lead.updated_at = datetime.now(timezone.utc)
 
     _ = status_changed  # reserved for future webhook: lead.status_changed
+    return LeadOut.model_validate(lead)
+
+
+class LeadArchiveIn(BaseModel):
+    reason: str | None = None
+
+
+@router.post("/leads/{lead_id}/archive", response_model=LeadOut)
+def archive_lead(
+    lead_id: int,
+    payload: LeadArchiveIn,
+    dealer_id: DealerId,
+    db: Annotated[Session, Depends(get_session)],
+) -> LeadOut:
+    """Soft-delete: filtered out of /leads by default but the row stays
+    so the audit trail (Interactions, Messages) survives. Logs an
+    Interaction so the timeline shows when + why."""
+    lead = _require_lead(db, lead_id, dealer_id)
+    if lead.deleted_at is not None:
+        return LeadOut.model_validate(lead)
+    now = datetime.now(timezone.utc)
+    lead.deleted_at = now
+    lead.deleted_by = dealer_id
+    lead.delete_reason = (payload.reason or "")[:256] or None
+    db.add(
+        Interaction(
+            lead_id=lead.id,
+            kind=InteractionKind.STATUS_CHANGE.value,
+            body=f"archived: {lead.delete_reason or 'no reason given'}",
+            actor=dealer_id,
+        )
+    )
+    lead.updated_at = now
+    return LeadOut.model_validate(lead)
+
+
+@router.post("/leads/{lead_id}/restore", response_model=LeadOut)
+def restore_lead(
+    lead_id: int,
+    dealer_id: DealerId,
+    db: Annotated[Session, Depends(get_session)],
+) -> LeadOut:
+    """Undo a soft-delete. Allowed for 30 days after archive; after
+    that the row may already be hard-deleted by the sweeper."""
+    lead = db.get(Lead, lead_id)
+    if not lead or lead.dealer_id != dealer_id:
+        raise HTTPException(404, "lead not found")
+    if lead.deleted_at is None:
+        return LeadOut.model_validate(lead)
+    age = datetime.now(timezone.utc) - (
+        lead.deleted_at
+        if lead.deleted_at.tzinfo
+        else lead.deleted_at.replace(tzinfo=timezone.utc)
+    )
+    if age.days > 30:
+        raise HTTPException(410, "archive window expired (30 days)")
+    lead.deleted_at = None
+    lead.deleted_by = None
+    lead.delete_reason = None
+    lead.updated_at = datetime.now(timezone.utc)
+    db.add(
+        Interaction(
+            lead_id=lead.id,
+            kind=InteractionKind.STATUS_CHANGE.value,
+            body="restored from archive",
+            actor=dealer_id,
+        )
+    )
     return LeadOut.model_validate(lead)
 
 

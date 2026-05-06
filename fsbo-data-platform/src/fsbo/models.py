@@ -465,6 +465,15 @@ class Lead(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+    # Soft-delete: rows stay in the DB so the audit trail survives.
+    # Filtered out of every query unless the caller explicitly asks for
+    # archived rows. Restorable for 30 days; a separate sweeper hard-
+    # deletes after that.
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), index=True
+    )
+    deleted_by: Mapped[str | None] = mapped_column(String(255))
+    delete_reason: Mapped[str | None] = mapped_column(String(256))
 
 
 class Interaction(Base):

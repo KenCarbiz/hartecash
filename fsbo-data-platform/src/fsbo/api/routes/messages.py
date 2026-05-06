@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from fsbo.auth.resolver import DealerId
 from fsbo.db import get_session
 from fsbo.messaging.twilio_client import send_sms
+from fsbo.messaging.twilio_signature import verify_twilio_signature
 from fsbo.models import Interaction, InteractionKind, Lead, Listing, Message
 
 router = APIRouter(tags=["messaging"])
@@ -113,12 +114,16 @@ def list_messages(
 
 # ---- Twilio webhooks ----
 # Twilio POSTs x-www-form-urlencoded status updates and inbound MMS/SMS
-# to the URL you configure in the console. These endpoints should be
-# guarded by HMAC signature validation (X-Twilio-Signature) before
-# going to production. Stubbed here with a TODO.
+# to the URL you configure in the console. Guarded by HMAC validation
+# of X-Twilio-Signature against TWILIO_AUTH_TOKEN. The signature dep
+# fetches the form via request.form() and caches it on request.state
+# so the route's Form() params can read the same body.
 
 
-@router.post("/webhooks/twilio/status")
+@router.post(
+    "/webhooks/twilio/status",
+    dependencies=[Depends(verify_twilio_signature)],
+)
 async def twilio_status(
     db: Annotated[Session, Depends(get_session)],
     MessageSid: Annotated[str, Form()],
@@ -138,7 +143,10 @@ async def twilio_status(
     return {"ok": "1", "matched": "none"}
 
 
-@router.post("/webhooks/twilio/inbound")
+@router.post(
+    "/webhooks/twilio/inbound",
+    dependencies=[Depends(verify_twilio_signature)],
+)
 async def twilio_inbound(
     db: Annotated[Session, Depends(get_session)],
     From: Annotated[str, Form()],
