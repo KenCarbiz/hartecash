@@ -92,10 +92,15 @@ export default async function ListingDetailPage({
   if (!listing) notFound();
 
   // Visiting the listing detail page is implicit "I read the inbound
-  // thread" — clear the unread badge if there is one.
-  if (lead?.id && isLeadUnread(lead)) {
-    await markLeadSeen(lead.id).catch(() => null);
-  }
+  // thread" — clear the unread badge if there is one. Runs in parallel
+  // with the rest of the page data so it never blocks TTFB; we don't
+  // need to await its result for rendering since the freshly captured
+  // `lead.last_seen_inbound_at` already reflects the pre-clear value
+  // (which is what UnifiedFeedPanel uses for "NEW" highlighting).
+  const seenPromise: Promise<unknown> =
+    lead?.id && isLeadUnread(lead)
+      ? markLeadSeen(lead.id).catch(() => null)
+      : Promise.resolve(null);
 
   const [
     interactions,
@@ -120,8 +125,11 @@ export default async function ListingDetailPage({
     lead ? listVoiceCalls(lead.id).catch(() => []) : Promise.resolve([]),
     getCachedHistoryReport(listingId).catch(() => null),
     lead ? listOffersForLead(lead.id).catch(() => []) : Promise.resolve([]),
-    getNotificationPrefs().catch(() => null),
+    // Only fetch the rep's saved phone if there's a lead — without one
+    // the bridge form doesn't render and this is dead work.
+    lead ? getNotificationPrefs().catch(() => null) : Promise.resolve(null),
   ]);
+  await seenPromise;
 
   // App origin so the OfferComposer can show the dealer the public
   // offer URL they'll text the seller.

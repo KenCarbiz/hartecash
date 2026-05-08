@@ -13,6 +13,7 @@ Best-effort: honors User.alerts_enabled, swallows transport errors
 from __future__ import annotations
 
 import asyncio
+import threading
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -22,6 +23,27 @@ from fsbo.messaging.email_client import send_email
 from fsbo.models import Lead, Listing, User
 
 log = get_logger(__name__)
+
+
+def _send_in_background(to: str, subject: str, text: str, lead_id: int) -> None:
+    """Fire the email from a daemon thread so the request handler
+    returns immediately. Each thread runs its own short-lived event
+    loop. Volume is low (one email per lead assignment), so per-send
+    thread overhead is acceptable; revisit with a worker queue if
+    assignment volume grows."""
+
+    def _run() -> None:
+        try:
+            asyncio.run(send_email(to, subject, text))
+        except Exception as e:  # noqa: BLE001
+            log.warning(
+                "assignment_notify.send_failed",
+                lead_id=lead_id,
+                user_email=to,
+                error=str(e)[:160],
+            )
+
+    threading.Thread(target=_run, daemon=True).start()
 
 
 def notify_assignment(
@@ -48,15 +70,7 @@ def notify_assignment(
         return False
 
     subject, text = _render(lead, listing, prev_owner=prev_owner)
-    try:
-        asyncio.run(send_email(user.email, subject, text))
-    except Exception as e:  # noqa: BLE001 — best-effort, never raise
-        log.warning(
-            "assignment_notify.send_failed",
-            lead_id=lead.id,
-            user_email=user.email,
-            error=str(e)[:160],
-        )
+    _send_in_background(user.email, subject, text, lead_id=lead.id)
     return True
 
 

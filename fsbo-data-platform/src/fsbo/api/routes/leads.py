@@ -6,6 +6,7 @@ are rejected in production.
 """
 
 import csv
+import hashlib
 import io
 from collections.abc import Iterator
 from datetime import datetime, timedelta, timezone
@@ -19,14 +20,26 @@ from sqlalchemy.orm import Session
 
 from fsbo.auth.resolver import DealerId
 from fsbo.db import get_session
+from fsbo.api.routes.routing import (
+    ACTIVE_STATUSES,
+    LOAD_WINDOW_DAYS,
+    assign_next,
+)
+from fsbo.crm.response import mark_first_response, mark_inbound_seen
+from fsbo.messaging.assign_notify import notify_assignment
+from fsbo.messaging.tcpa import normalize_phone
 from fsbo.models import (
+    Dealer,
     InteractionKind,
     Interaction,
     Lead,
     LeadStatus,
     Listing,
+    Message,
     User,
+    VoiceCall,
 )
+from fsbo.webhooks.delivery import enqueue_for_lead_status_change
 
 router = APIRouter(tags=["crm"])
 
@@ -120,8 +133,6 @@ def create_lead(
     # Auto-assign via routing config when the caller didn't pick a rep.
     assigned_to = payload.assigned_to
     if assigned_to is None:
-        from fsbo.api.routes.routing import assign_next
-
         assigned_to = assign_next(db, dealer_id)
 
     lead = Lead(
@@ -134,8 +145,6 @@ def create_lead(
     db.flush()
 
     if assigned_to:
-        from fsbo.messaging.assign_notify import notify_assignment
-
         try:
             notify_assignment(db, lead)
         except Exception:  # noqa: BLE001
@@ -187,12 +196,6 @@ def bulk_claim(
     routing_loads: dict[str, int] = {}
     routing_pool: list[str] = []
     if use_routing:
-        from fsbo.api.routes.routing import (
-            ACTIVE_STATUSES,
-            LOAD_WINDOW_DAYS,
-        )
-        from fsbo.models import Dealer
-
         dealer = db.scalar(select(Dealer).where(Dealer.slug == dealer_id))
         if dealer and dealer.routing_mode == "least_loaded" and dealer.routing_pool:
             routing_pool = list(dealer.routing_pool)
@@ -233,8 +236,6 @@ def bulk_claim(
 
     # Best-effort notify after flush so each lead has its id.
     if any(l.assigned_to for l in new_leads):
-        from fsbo.messaging.assign_notify import notify_assignment
-
         for lead in new_leads:
             if not lead.assigned_to:
                 continue
@@ -322,7 +323,6 @@ def bulk_status_change(
 
     # Webhook fan-out (best-effort)
     if changed_leads:
-        from fsbo.webhooks.delivery import enqueue_for_lead_status_change
 
         for lead, prev in changed_leads:
             try:
@@ -370,7 +370,6 @@ def bulk_assign(
     db.flush()
 
     if reassigned:
-        from fsbo.messaging.assign_notify import notify_assignment
 
         for lead, prev in reassigned:
             try:
@@ -588,12 +587,6 @@ def _normalize_header(raw: str) -> str | None:
     return None
 
 
-def _digits10(phone: str | None) -> str:
-    if not phone:
-        return ""
-    return "".join(c for c in phone if c.isdigit())[-10:]
-
-
 def _row_int(row: dict[str, str], key: str) -> int | None:
     raw = (row.get(key) or "").strip()
     if not raw:
@@ -672,9 +665,14 @@ async def import_leads_csv(
     skipped = 0
     errors: list[ImportRowError] = []
     MAX_ROWS = 5000
+    # Cap returned errors so a malicious all-bad file can't balloon the
+    # JSON response. Caller still sees the row count in `imported`/`skipped`.
+    MAX_ERRORS = 100
 
-    import hashlib
-
+    # TODO(perf): the per-row `db.scalar(...)` lookups below are N+1.
+    # Acceptable today (one-time migration per dealer, capped at 5K rows
+    # = seconds on SQLite). Move to a two-pass batch lookup if the cap
+    # raises or imports get more frequent.
     for line_num, raw_row in enumerate(reader, start=2):
         if line_num - 1 > MAX_ROWS:
             errors.append(
@@ -692,12 +690,13 @@ async def import_leads_csv(
         vin = (row.get("vin") or "").strip().upper() or None
 
         if not phone and not email and not vin:
-            errors.append(
-                ImportRowError(
-                    row=line_num,
-                    error="missing phone, email, and vin — can't identify seller",
+            if len(errors) < MAX_ERRORS:
+                errors.append(
+                    ImportRowError(
+                        row=line_num,
+                        error="missing phone, email, and vin — can't identify seller",
+                    )
                 )
-            )
             continue
 
         # Stable external_id so re-imports dedupe deterministically.
@@ -706,7 +705,7 @@ async def import_leads_csv(
         if vin:
             ext_seed = f"vin:{vin}"
         elif phone:
-            ext_seed = f"phone:{_digits10(phone)}"
+            ext_seed = f"phone:{normalize_phone(phone)}"
         else:
             ext_seed = f"email:{(email or '').lower()}"
         ext_id = "csv-" + hashlib.sha1(ext_seed.encode()).hexdigest()[:16]
@@ -764,7 +763,9 @@ async def import_leads_csv(
             continue
 
         status_raw = (row.get("status") or "").strip().lower().replace(" ", "_")
-        status = status_raw if status_raw in _VALID_STATUSES else "new"
+        status = (
+            status_raw if status_raw in _VALID_STATUSES else LeadStatus.NEW.value
+        )
 
         lead = Lead(
             dealer_id=dealer_id,
@@ -866,7 +867,6 @@ def list_stale_leads(
       - it isn't archived
     Ordered oldest-first so the rep works the most-urgent backlog first.
     """
-    from fsbo.models import Message, VoiceCall
 
     if sla_minutes < 0:
         sla_minutes = 0
@@ -914,7 +914,7 @@ def list_stale_leads(
         .where(
             Lead.dealer_id == dealer_id,
             Lead.deleted_at.is_(None),
-            Lead.status.in_(("new", "contacted")),
+            Lead.status.in_((LeadStatus.NEW.value, LeadStatus.CONTACTED.value)),
             Lead.created_at <= cutoff,
         )
     )
@@ -994,7 +994,6 @@ def mark_lead_seen(
 ) -> LeadOut:
     """Mark the inbound thread on this lead read (clears the unread
     badge). Idempotent — repeat calls just bump the timestamp."""
-    from fsbo.crm.response import mark_inbound_seen
 
     lead = _require_lead(db, lead_id, dealer_id)
     mark_inbound_seen(lead)
@@ -1035,7 +1034,6 @@ def update_lead(
     db.flush()
 
     if status_changed:
-        from fsbo.webhooks.delivery import enqueue_for_lead_status_change
 
         try:
             enqueue_for_lead_status_change(db, lead, prev_status)
@@ -1134,7 +1132,6 @@ def create_interaction(
     )
     db.add(interaction)
     if (payload.direction or "").lower() == "outbound":
-        from fsbo.crm.response import mark_first_response
 
         mark_first_response(lead)
     lead.updated_at = datetime.now(timezone.utc)
@@ -1211,7 +1208,6 @@ def lead_feed(
         .order_by(Interaction.created_at.desc())
     ).all()
 
-    from fsbo.models import Message, VoiceCall  # local import — avoid circulars
 
     messages = db.scalars(
         select(Message)

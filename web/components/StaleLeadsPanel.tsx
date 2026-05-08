@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { formatPrice, getStaleLeads } from "@/lib/api";
+import { formatDuration, formatPrice, getStaleLeads } from "@/lib/api";
 
 export async function StaleLeadsPanel({ slaMinutes = 5 }: { slaMinutes?: number }) {
   let stale;
@@ -53,7 +53,7 @@ export async function StaleLeadsPanel({ slaMinutes = 5 }: { slaMinutes?: number 
                   {formatPrice(l.listing_price ?? null)}
                 </p>
                 <p className="text-xs font-semibold text-rose-700 tabular flex-none w-20 text-right">
-                  {formatStaleness(l.minutes_since_created)}
+                  {formatDuration(l.minutes_since_created)} old
                 </p>
               </Link>
             </li>
@@ -64,10 +64,3 @@ export async function StaleLeadsPanel({ slaMinutes = 5 }: { slaMinutes?: number 
   );
 }
 
-function formatStaleness(minutes: number): string {
-  if (minutes < 60) return `${minutes}m old`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h old`;
-  const days = Math.floor(hours / 24);
-  return `${days}d old`;
-}

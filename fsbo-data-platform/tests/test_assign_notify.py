@@ -74,11 +74,24 @@ def _seed_dealer_with_routing(db, pool: list[str]) -> Dealer:
 
 @pytest.fixture
 def email_capture(monkeypatch):
-    """Patch send_email at the call site to capture invocations."""
+    """Patch send_email at the call site to capture invocations.
+
+    Production runs sends from a daemon thread (so the request handler
+    isn't blocked on SendGrid). For deterministic tests we override the
+    thread spawner to invoke send_email inline — same captures, no race."""
     captured: list[dict] = []
 
-    async def fake_send_email(to, subject, text, html_body=None, from_address=None):
+    def _sync_send(to: str, subject: str, text: str, lead_id: int) -> None:
         captured.append({"to": to, "subject": subject, "text": text})
+
+    monkeypatch.setattr(
+        "fsbo.messaging.assign_notify._send_in_background",
+        _sync_send,
+        raising=True,
+    )
+    # Keep the older patch site in case any test imports send_email
+    # directly through the module reference.
+    async def fake_send_email(to, subject, text, html_body=None, from_address=None):
         return EmailResult(backend="test", sent=True)
 
     monkeypatch.setattr(

@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import { AssigneeDropdown } from "@/components/AssigneeDropdown";
 import { BulkLeadActionsBar } from "@/components/BulkLeadActionsBar";
 import {
+  formatDuration,
   formatMileage,
   formatPrice,
   formatRelativeDate,
@@ -204,7 +205,7 @@ function FirstTouch({
         : minutes <= 60
           ? "text-ink-600"
           : "text-amber-700";
-    return <span className={tone}>{formatMinutes(minutes)}</span>;
+    return <span className={tone}>{formatDuration(minutes)}</span>;
   }
   if (status === "purchased" || status === "lost") {
     return <span className="text-ink-400">—</span>;
@@ -215,12 +216,4 @@ function FirstTouch({
   const tone =
     stale > 60 ? "text-rose-700" : stale > 5 ? "text-amber-700" : "text-ink-500";
   return <span className={tone}>not yet</span>;
-}
-
-function formatMinutes(m: number): string {
-  if (m < 60) return `${m}m`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h`;
-  const d = Math.floor(h / 24);
-  return `${d}d`;
 }

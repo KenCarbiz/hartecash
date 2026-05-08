@@ -23,7 +23,17 @@ from sqlalchemy.orm import Session
 
 from fsbo.auth.resolver import DealerId
 from fsbo.db import get_session
-from fsbo.models import Classification, Dealer, DealerGroup, Interaction, Lead, Listing
+from fsbo.models import (
+    Classification,
+    Dealer,
+    DealerGroup,
+    Interaction,
+    Lead,
+    Listing,
+    Message,
+    Offer,
+    VoiceCall,
+)
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
@@ -217,10 +227,6 @@ def leaderboard(
     """
     until = datetime.now(timezone.utc)
     since = until - timedelta(days=days)
-
-    # Local imports — avoid pulling these into module-load surface
-    # for places that only care about the funnel.
-    from fsbo.models import Message, Offer, VoiceCall
 
     UNASSIGNED = "(unassigned)"
 
@@ -690,7 +696,6 @@ def activity_log(
     on STOP keyword, status changes from webhook fan-out) carry
     actor='system'.
     """
-    from fsbo.models import Interaction
 
     stmt = (
         select(Interaction, Lead, Listing)

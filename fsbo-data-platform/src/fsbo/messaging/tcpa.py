@@ -33,7 +33,7 @@ from typing import Literal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from fsbo.models import SmsConsent, SmsOptOut
+from fsbo.models import Dealer, SmsConsent, SmsOptOut
 
 # Stop-keyword list per CTIA + Twilio guidance. Compared lower-case
 # after stripping whitespace + punctuation.
@@ -188,8 +188,6 @@ def check_send_allowed(
     # 2. Quiet hours. Dealer-level override (when set) takes precedence
     # over the federal 8 AM - 8 PM default — used for dealerships that
     # want a tighter window than law requires (e.g. 9 AM - 6 PM).
-    from fsbo.models import Dealer
-
     qh_start: str | None = None
     qh_end: str | None = None
     dealer_row = db.scalar(select(Dealer).where(Dealer.slug == dealer_id))

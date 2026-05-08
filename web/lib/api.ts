@@ -1015,6 +1015,26 @@ export async function addInteraction(
   return (await res.json()) as Interaction;
 }
 
+/**
+ * Render a minute-count as "5m" / "3h" / "2d" — the bucket pattern used
+ * by every duration display on the dashboard (first-touch, stale-lead
+ * age, SLA medians, leaderboard avg). Pass `decimals: 1` for the SLA
+ * panel's "1.5h" style.
+ */
+export function formatDuration(
+  minutes: number,
+  opts: { decimals?: 0 | 1; suffix?: string } = {},
+): string {
+  const { decimals = 0, suffix = "" } = opts;
+  const fmt = (n: number) =>
+    decimals === 0 ? `${Math.floor(n)}` : n.toFixed(decimals);
+  if (minutes < 60) return `${Math.floor(minutes)}m${suffix}`;
+  const h = minutes / 60;
+  if (h < 24) return `${fmt(h)}h${suffix}`;
+  const d = h / 24;
+  return `${fmt(d)}d${suffix}`;
+}
+
 export function formatRelativeDate(value: string | null): string {
   if (!value) return "—";
   const then = new Date(value);

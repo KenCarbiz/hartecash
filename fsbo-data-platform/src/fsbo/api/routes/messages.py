@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from fsbo.auth.resolver import DealerId
 from fsbo.config import settings
 from fsbo.config import settings as app_settings
+from fsbo.crm.response import mark_first_response, mark_inbound_received
 from fsbo.db import get_session
 from fsbo.messaging.email_client import send_email
 from fsbo.messaging.intent import classify_inbound
@@ -121,7 +122,6 @@ async def send(
             body=payload.body,
         )
     )
-    from fsbo.crm.response import mark_first_response
 
     mark_first_response(lead)
     lead.updated_at = datetime.now(timezone.utc)
@@ -230,7 +230,6 @@ async def send_email_to_seller(
             body=payload.body,
         )
     )
-    from fsbo.crm.response import mark_first_response
 
     if result.sent:
         mark_first_response(lead)
@@ -356,7 +355,6 @@ async def twilio_inbound(
                 body=Body,
             )
         )
-        from fsbo.crm.response import mark_inbound_received
 
         mark_inbound_received(lead)
         lead.updated_at = datetime.now(timezone.utc)
@@ -398,7 +396,6 @@ async def twilio_inbound(
                     )
                 )
 
-        # Persist last_inbound_at + status updates before returning.
         db.flush()
 
     # Return empty TwiML so Twilio doesn't auto-reply.
@@ -503,7 +500,6 @@ async def inbound_email(
             body=(f"[{subject}] " if subject else "") + body_text,
         )
     )
-    from fsbo.crm.response import mark_inbound_received
 
     mark_inbound_received(lead)
     lead.updated_at = datetime.now(timezone.utc)

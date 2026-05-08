@@ -1,4 +1,4 @@
-import { getSlaStats } from "@/lib/api";
+import { formatDuration, getSlaStats } from "@/lib/api";
 
 export async function SlaStatsPanel({ days = 30 }: { days?: number }) {
   let stats;
@@ -83,12 +83,7 @@ function Stat({
 }
 
 function formatMin(m: number | null): string {
-  if (m === null) return "—";
-  if (m < 60) return `${m}m`;
-  const h = m / 60;
-  if (h < 24) return `${h.toFixed(1)}h`;
-  const d = h / 24;
-  return `${d.toFixed(1)}d`;
+  return m === null ? "—" : formatDuration(m, { decimals: 1 });
 }
 
 function tone(

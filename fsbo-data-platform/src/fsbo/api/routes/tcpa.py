@@ -13,6 +13,7 @@ to dealers so they can:
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Annotated
 
@@ -28,7 +29,7 @@ from fsbo.messaging.tcpa import (
     record_consent,
     record_opt_out,
 )
-from fsbo.models import SmsConsent, SmsOptOut
+from fsbo.models import Dealer, SmsConsent, SmsOptOut
 
 router = APIRouter(prefix="/tcpa", tags=["tcpa"])
 
@@ -157,8 +158,6 @@ def list_consents(
 # ---- Quiet-hours override ------------------------------------------
 
 
-import re
-
 _HHMM_RE = re.compile(r"^(?P<h>\d{1,2}):(?P<m>\d{2})$")
 
 
@@ -197,8 +196,6 @@ def get_quiet_hours(
     dealer_id: DealerId,
     db: Annotated[Session, Depends(get_session)],
 ) -> QuietHoursOut:
-    from fsbo.models import Dealer
-
     row = db.scalar(select(Dealer).where(Dealer.slug == dealer_id))
     start = (row.quiet_hours_start if row else None) or "08:00"
     end = (row.quiet_hours_end if row else None) or "20:00"
@@ -220,8 +217,6 @@ def update_quiet_hours(
     start < 08:00 or end > 20:00 is rejected so misconfiguration can't
     create TCPA exposure.
     """
-    from fsbo.models import Dealer
-
     start_norm = _validate_hhmm(payload.start)
     end_norm = _validate_hhmm(payload.end)
 
