@@ -154,6 +154,8 @@ PROTECTED_ENDPOINTS: list[tuple[str, str, dict | None]] = [
     ("POST", "/offers/1/withdraw", None),
     # Per-rep leaderboard
     ("GET", "/analytics/leaderboard", None),
+    # Dealership SLA stats
+    ("GET", "/analytics/sla", None),
     # Lead routing config
     ("GET", "/routing", None),
     ("PUT", "/routing", {"mode": "manual", "pool": []}),

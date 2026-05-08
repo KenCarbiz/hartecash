@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/AppShell";
 import { LeaderboardPanel } from "@/components/LeaderboardPanel";
+import { SlaStatsPanel } from "@/components/SlaStatsPanel";
 import { getFunnel, getLeaderboard } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
@@ -132,6 +133,8 @@ export default async function AnalyticsPage({
           />
         </div>
       </div>
+
+      <SlaStatsPanel days={window} />
 
       <div className="mb-6">
         <LeaderboardPanel leaderboard={leaderboard} days={window} />

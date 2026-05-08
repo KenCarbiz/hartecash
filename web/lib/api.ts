@@ -1282,6 +1282,37 @@ export async function getLeaderboard(
   return (await res.json()) as LeaderboardResponse;
 }
 
+// ---- Dealership SLA stats ----
+
+export interface SlaStats {
+  dealer_id: string;
+  since: string;
+  until: string;
+  sla_minutes: number;
+  leads_total: number;
+  leads_responded: number;
+  leads_unresponded: number;
+  leads_within_sla: number;
+  leads_breached: number;
+  median_response_minutes: number | null;
+  p90_response_minutes: number | null;
+  avg_response_minutes: number | null;
+  pct_under_5_min: number;
+  pct_under_30_min: number;
+  pct_under_2_hr: number;
+}
+
+export async function getSlaStats(
+  days = 30,
+  slaMinutes = 5,
+): Promise<SlaStats | null> {
+  const res = await apiFetch(
+    `/analytics/sla?days=${days}&sla_minutes=${slaMinutes}`,
+  );
+  if (!res.ok) return null;
+  return (await res.json()) as SlaStats;
+}
+
 // ---- Onboarding checklist ----
 
 export interface OnboardingItem {

@@ -524,3 +524,126 @@ def group_funnel(
             leads_purchased=totals["purchased"],
         ),
     )
+
+
+# ---- Dealership SLA stats -------------------------------------------
+
+
+class SlaStatsResponse(BaseModel):
+    dealer_id: str
+    since: datetime
+    until: datetime
+    sla_minutes: int
+    leads_total: int
+    leads_responded: int
+    leads_unresponded: int
+    leads_within_sla: int
+    leads_breached: int
+    median_response_minutes: float | None
+    p90_response_minutes: float | None
+    avg_response_minutes: float | None
+    pct_under_5_min: float
+    pct_under_30_min: float
+    pct_under_2_hr: float
+
+
+@router.get("/sla", response_model=SlaStatsResponse)
+def sla_stats(
+    dealer_id: DealerId,
+    db: Annotated[Session, Depends(get_session)],
+    days: int = Query(30, ge=1, le=365),
+    sla_minutes: int = Query(5, ge=1, le=1440),
+) -> SlaStatsResponse:
+    """Dealership-level first-response SLA stats for the last N days.
+
+    Reads Lead.first_responded_at (stamped by fsbo.crm.response on every
+    outbound channel). Median + p90 are the metrics sales managers want;
+    the % buckets are the lead-aggregator industry benchmarks (5 min,
+    30 min, 2 hr).
+
+    Unresponded leads count toward leads_breached only when older than
+    sla_minutes — fresh leads inside the window are pending, not breached.
+    """
+    until = datetime.now(timezone.utc)
+    since = until - timedelta(days=days)
+    sla_cutoff = until - timedelta(minutes=sla_minutes)
+
+    rows = db.execute(
+        select(Lead.created_at, Lead.first_responded_at).where(
+            Lead.dealer_id == dealer_id,
+            Lead.created_at >= since,
+            Lead.deleted_at.is_(None),
+        )
+    ).all()
+
+    response_minutes: list[float] = []
+    leads_responded = 0
+    leads_unresponded_old = 0  # breached
+    leads_unresponded_fresh = 0  # in-window, not yet stale
+    under_5 = 0
+    under_30 = 0
+    under_120 = 0
+
+    for created_at, first_at in rows:
+        created = (
+            created_at if created_at.tzinfo else created_at.replace(tzinfo=timezone.utc)
+        )
+        if first_at is not None:
+            first = (
+                first_at if first_at.tzinfo else first_at.replace(tzinfo=timezone.utc)
+            )
+            minutes = max(0.0, (first - created).total_seconds() / 60.0)
+            response_minutes.append(minutes)
+            leads_responded += 1
+            if minutes <= 5:
+                under_5 += 1
+            if minutes <= 30:
+                under_30 += 1
+            if minutes <= 120:
+                under_120 += 1
+        else:
+            if created <= sla_cutoff:
+                leads_unresponded_old += 1
+            else:
+                leads_unresponded_fresh += 1
+
+    leads_total = len(rows)
+    leads_within_sla = sum(1 for m in response_minutes if m <= sla_minutes)
+    leads_breached = (
+        leads_unresponded_old
+        + sum(1 for m in response_minutes if m > sla_minutes)
+    )
+
+    def _percentile(values: list[float], pct: float) -> float | None:
+        if not values:
+            return None
+        import math
+
+        sorted_v = sorted(values)
+        # Nearest-rank percentile (ceil convention) — avoids numpy dep
+        # and gives the textbook median (middle value for odd N).
+        rank = max(1, math.ceil(pct / 100.0 * len(sorted_v)))
+        return round(sorted_v[rank - 1], 1)
+
+    avg = round(sum(response_minutes) / len(response_minutes), 1) if response_minutes else None
+
+    def _pct(numerator: int) -> float:
+        return round(100.0 * numerator / leads_total, 1) if leads_total else 0.0
+
+    return SlaStatsResponse(
+        dealer_id=dealer_id,
+        since=since,
+        until=until,
+        sla_minutes=sla_minutes,
+        leads_total=leads_total,
+        leads_responded=leads_responded,
+        leads_unresponded=leads_unresponded_old + leads_unresponded_fresh,
+        leads_within_sla=leads_within_sla,
+        leads_breached=leads_breached,
+        median_response_minutes=_percentile(response_minutes, 50.0),
+        p90_response_minutes=_percentile(response_minutes, 90.0),
+        avg_response_minutes=avg,
+        pct_under_5_min=_pct(under_5),
+        pct_under_30_min=_pct(under_30),
+        pct_under_2_hr=_pct(under_120),
+    )
