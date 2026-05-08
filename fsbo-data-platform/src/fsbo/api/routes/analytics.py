@@ -647,3 +647,83 @@ def sla_stats(
         pct_under_30_min=_pct(under_30),
         pct_under_2_hr=_pct(under_120),
     )
+
+
+# ---- Cross-lead activity log (manager view) -------------------------
+
+
+class ActivityRow(BaseModel):
+    interaction_id: int
+    lead_id: int
+    listing_id: int
+    listing_title: str | None
+    actor: str | None  # who did it (rep email or "system")
+    kind: str
+    direction: str | None
+    body: str | None
+    created_at: datetime
+
+
+class ActivityLogResponse(BaseModel):
+    dealer_id: str
+    rows: list[ActivityRow]
+    has_more: bool
+
+
+@router.get("/activity", response_model=ActivityLogResponse)
+def activity_log(
+    dealer_id: DealerId,
+    db: Annotated[Session, Depends(get_session)],
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    kind: str | None = Query(None, description="filter by Interaction.kind"),
+    actor: str | None = Query(None, description="filter by Interaction.actor"),
+) -> ActivityLogResponse:
+    """Manager-facing audit feed across every lead in the dealership.
+
+    Joins Interactions to Leads (scoped to dealer_id) so a manager can
+    see who did what on which lead in chronological order. Supports
+    paging + per-actor / per-kind filters.
+
+    Note: actor falls back to Lead.assigned_to when Interaction.actor
+    is null (e.g. for legacy rows). System-generated rows (auto-close
+    on STOP keyword, status changes from webhook fan-out) carry
+    actor='system'.
+    """
+    from fsbo.models import Interaction
+
+    stmt = (
+        select(Interaction, Lead, Listing)
+        .join(Lead, Interaction.lead_id == Lead.id)
+        .join(Listing, Lead.listing_id == Listing.id)
+        .where(Lead.dealer_id == dealer_id)
+    )
+    if kind:
+        stmt = stmt.where(Interaction.kind == kind)
+    if actor:
+        stmt = stmt.where(Interaction.actor == actor)
+
+    # Fetch one extra to detect has_more without a separate count query.
+    stmt = stmt.order_by(Interaction.created_at.desc()).limit(limit + 1).offset(offset)
+    rows = db.execute(stmt).all()
+    has_more = len(rows) > limit
+    rows = rows[:limit]
+
+    return ActivityLogResponse(
+        dealer_id=dealer_id,
+        has_more=has_more,
+        rows=[
+            ActivityRow(
+                interaction_id=interaction.id,
+                lead_id=lead.id,
+                listing_id=listing.id,
+                listing_title=listing.title,
+                actor=interaction.actor or lead.assigned_to,
+                kind=interaction.kind,
+                direction=interaction.direction,
+                body=interaction.body,
+                created_at=interaction.created_at,
+            )
+            for interaction, lead, listing in rows
+        ],
+    )

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ActivityLogPanel } from "@/components/ActivityLogPanel";
 import { PageHeader } from "@/components/AppShell";
 import { LeaderboardPanel } from "@/components/LeaderboardPanel";
 import { SlaStatsPanel } from "@/components/SlaStatsPanel";
@@ -139,6 +140,8 @@ export default async function AnalyticsPage({
       <div className="mb-6">
         <LeaderboardPanel leaderboard={leaderboard} days={window} />
       </div>
+
+      <ActivityLogPanel />
 
       <div className="panel">
         <div className="panel-header">

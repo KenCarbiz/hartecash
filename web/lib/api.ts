@@ -1313,6 +1313,44 @@ export async function getSlaStats(
   return (await res.json()) as SlaStats;
 }
 
+// ---- Cross-lead activity log (manager view) ----
+
+export interface ActivityRow {
+  interaction_id: number;
+  lead_id: number;
+  listing_id: number;
+  listing_title: string | null;
+  actor: string | null;
+  kind: string;
+  direction: string | null;
+  body: string | null;
+  created_at: string;
+}
+
+export interface ActivityLog {
+  dealer_id: string;
+  rows: ActivityRow[];
+  has_more: boolean;
+}
+
+export async function getActivityLog(params: {
+  limit?: number;
+  offset?: number;
+  kind?: string;
+  actor?: string;
+} = {}): Promise<ActivityLog | null> {
+  const qs = new URLSearchParams();
+  if (params.limit !== undefined) qs.set("limit", String(params.limit));
+  if (params.offset !== undefined) qs.set("offset", String(params.offset));
+  if (params.kind) qs.set("kind", params.kind);
+  if (params.actor) qs.set("actor", params.actor);
+  const res = await apiFetch(
+    `/analytics/activity${qs.toString() ? `?${qs}` : ""}`,
+  );
+  if (!res.ok) return null;
+  return (await res.json()) as ActivityLog;
+}
+
 // ---- Onboarding checklist ----
 
 export interface OnboardingItem {
