@@ -6,8 +6,21 @@ import { formatRelativeDate, type FeedEntry } from "@/lib/api";
  *  Server-rendered, no live polling. The lead detail page passes in
  *  whatever the API returned at request time; refreshing the page
  *  refetches.
+ *
+ *  When `lastSeenInboundAt` is provided, inbound entries newer than
+ *  that timestamp are highlighted as "new since you last looked" so
+ *  the rep can spot replies without re-reading the whole thread.
  */
-export function UnifiedFeedPanel({ entries }: { entries: FeedEntry[] }) {
+export function UnifiedFeedPanel({
+  entries,
+  lastSeenInboundAt = null,
+}: {
+  entries: FeedEntry[];
+  lastSeenInboundAt?: string | null;
+}) {
+  const seenMs = lastSeenInboundAt
+    ? new Date(lastSeenInboundAt).getTime()
+    : 0;
   if (entries.length === 0) {
     return (
       <div className="panel">
@@ -31,36 +44,51 @@ export function UnifiedFeedPanel({ entries }: { entries: FeedEntry[] }) {
         </span>
       </div>
       <ol className="divide-y divide-ink-100">
-        {entries.map((e) => (
-          <li
-            key={`${e.source_table}-${e.source_id}`}
-            className="flex gap-3 px-5 py-3"
-          >
-            <Glyph kind={e.kind} direction={e.direction} />
-            <div className="flex-1 min-w-0">
-              <div className="flex items-baseline justify-between gap-2">
-                <span className="text-xs font-medium text-ink-700">
-                  {label(e.kind, e.direction)}
-                </span>
-                <time className="text-[10px] tabular text-ink-500">
-                  {formatRelativeDate(e.created_at)}
-                </time>
+        {entries.map((e) => {
+          const isInbound =
+            e.direction === "inbound" || e.kind === "message:inbound";
+          const isNew =
+            isInbound &&
+            seenMs > 0 &&
+            new Date(e.created_at).getTime() > seenMs;
+          return (
+            <li
+              key={`${e.source_table}-${e.source_id}`}
+              className={`flex gap-3 px-5 py-3 ${
+                isNew ? "bg-amber-50 border-l-2 border-amber-400" : ""
+              }`}
+            >
+              <Glyph kind={e.kind} direction={e.direction} />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-xs font-medium text-ink-700 flex items-center gap-1.5">
+                    {label(e.kind, e.direction)}
+                    {isNew && (
+                      <span className="badge bg-amber-200 text-amber-900 text-[9px]">
+                        NEW
+                      </span>
+                    )}
+                  </span>
+                  <time className="text-[10px] tabular text-ink-500">
+                    {formatRelativeDate(e.created_at)}
+                  </time>
+                </div>
+                {e.body && (
+                  <p className="mt-0.5 text-sm text-ink-800 whitespace-pre-wrap break-words">
+                    {e.body}
+                  </p>
+                )}
+                {(e.actor || e.delivery_status) && (
+                  <p className="mt-0.5 text-[11px] text-ink-500 tabular">
+                    {e.actor && <>by {e.actor}</>}
+                    {e.actor && e.delivery_status && " · "}
+                    {e.delivery_status && <>{e.delivery_status}</>}
+                  </p>
+                )}
               </div>
-              {e.body && (
-                <p className="mt-0.5 text-sm text-ink-800 whitespace-pre-wrap break-words">
-                  {e.body}
-                </p>
-              )}
-              {(e.actor || e.delivery_status) && (
-                <p className="mt-0.5 text-[11px] text-ink-500 tabular">
-                  {e.actor && <>by {e.actor}</>}
-                  {e.actor && e.delivery_status && " · "}
-                  {e.delivery_status && <>{e.delivery_status}</>}
-                </p>
-              )}
-            </div>
-          </li>
-        ))}
+            </li>
+          );
+        })}
       </ol>
     </div>
   );

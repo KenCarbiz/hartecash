@@ -334,7 +334,12 @@ export default async function ListingDetailPage({
               status changes — chronological. The "messaging hub" VAN
               ships in their Lincoln Park release, with our voice-call
               + intake-summary entries folded in. */}
-          {lead && <UnifiedFeedPanel entries={feed} />}
+          {lead && (
+            <UnifiedFeedPanel
+              entries={feed}
+              lastSeenInboundAt={lead.last_seen_inbound_at}
+            />
+          )}
         </div>
 
         <div className="lg:col-span-1 space-y-3">
