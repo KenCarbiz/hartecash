@@ -54,6 +54,40 @@ STOP_KEYWORDS = {
 QUIET_HOURS_START = time(8, 0)
 QUIET_HOURS_END = time(20, 0)
 
+# Per-process TTL cache for the dealer's quiet-hours override. Every
+# outbound SMS / email / voice call goes through check_send_allowed,
+# which would otherwise issue a Dealer SELECT on every send. Quiet-
+# hours config changes infrequently — a 60s TTL keeps cache invalidation
+# trivially correct (worst case: a dealer who changes the window sees
+# their own sends respect it within a minute).
+_DEALER_QH_CACHE: dict[str, tuple[float, str | None, str | None]] = {}
+_DEALER_QH_TTL_SECONDS = 60.0
+
+
+def _quiet_hours_for_dealer(
+    db: Session, dealer_id: str
+) -> tuple[str | None, str | None]:
+    import time as _time
+
+    now = _time.monotonic()
+    cached = _DEALER_QH_CACHE.get(dealer_id)
+    if cached and now - cached[0] < _DEALER_QH_TTL_SECONDS:
+        return cached[1], cached[2]
+    row = db.scalar(select(Dealer).where(Dealer.slug == dealer_id))
+    qh_start = row.quiet_hours_start if row else None
+    qh_end = row.quiet_hours_end if row else None
+    _DEALER_QH_CACHE[dealer_id] = (now, qh_start, qh_end)
+    return qh_start, qh_end
+
+
+def invalidate_quiet_hours_cache(dealer_id: str | None = None) -> None:
+    """Clear the cache so a quiet-hours PUT shows up immediately on
+    the next send. Call from the /tcpa/quiet-hours PUT handler."""
+    if dealer_id is None:
+        _DEALER_QH_CACHE.clear()
+    else:
+        _DEALER_QH_CACHE.pop(dealer_id, None)
+
 
 # Coarse ZIP -> Olson tz mapping. Real geocoder is roadmap; this is
 # good enough to catch "Hawaii at 5 AM" obvious-block cases.
@@ -188,12 +222,7 @@ def check_send_allowed(
     # 2. Quiet hours. Dealer-level override (when set) takes precedence
     # over the federal 8 AM - 8 PM default — used for dealerships that
     # want a tighter window than law requires (e.g. 9 AM - 6 PM).
-    qh_start: str | None = None
-    qh_end: str | None = None
-    dealer_row = db.scalar(select(Dealer).where(Dealer.slug == dealer_id))
-    if dealer_row:
-        qh_start = dealer_row.quiet_hours_start
-        qh_end = dealer_row.quiet_hours_end
+    qh_start, qh_end = _quiet_hours_for_dealer(db, dealer_id)
     if in_quiet_hours(zip_code, start=qh_start, end=qh_end):
         tz = _tz_for_zip(zip_code)
         window = (

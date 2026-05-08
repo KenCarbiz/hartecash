@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 from fsbo.auth.resolver import DealerId
 from fsbo.db import get_session
 from fsbo.messaging.tcpa import (
+    invalidate_quiet_hours_cache,
     normalize_phone,
     record_consent,
     record_opt_out,
@@ -241,6 +242,7 @@ def update_quiet_hours(
     row.quiet_hours_start = start_norm
     row.quiet_hours_end = end_norm
     db.flush()
+    invalidate_quiet_hours_cache(dealer_id)
 
     return QuietHoursOut(
         start=row.quiet_hours_start or "08:00",

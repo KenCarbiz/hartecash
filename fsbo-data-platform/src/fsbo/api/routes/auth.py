@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from fsbo.auth.password import hash_password, verify_password
+from fsbo.auth.rate_limit import _client_ip, check_rate, reset as reset_rate
 from fsbo.auth.tokens import SESSION_COOKIE_NAME, issue, verify
 from fsbo.config import settings
 from fsbo.db import get_session
@@ -121,15 +122,29 @@ def register(
 @router.post("/login", response_model=MeOut)
 def login(
     payload: LoginIn,
+    request: Request,
     response: Response,
     db: Annotated[Session, Depends(get_session)],
 ) -> MeOut:
+    # Brute-force gate: 5 failures per (ip, email) per 15 min. Slows
+    # password-spray + credential-stuffing without breaking legit users
+    # who fat-finger a couple times.
+    rate_key = f"login:{_client_ip(request)}:{str(payload.email).lower()}"
+    if not check_rate(rate_key, limit=5, window_seconds=900):
+        raise HTTPException(
+            status_code=429,
+            detail="too many login attempts; try again in 15 minutes",
+        )
+
     user = db.scalar(select(User).where(User.email == str(payload.email).lower()))
     if not user or not user.is_active or not verify_password(
         payload.password, user.password_hash
     ):
         raise HTTPException(status_code=401, detail="invalid email or password")
 
+    # Successful login clears the failure counter so a user who got the
+    # password right after 4 typos isn't locked out next session.
+    reset_rate(rate_key)
     user.last_login_at = datetime.now(timezone.utc)
     db.flush()
 

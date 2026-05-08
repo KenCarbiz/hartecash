@@ -11,7 +11,6 @@ from sqlalchemy.orm import Session
 
 from fsbo.auth.resolver import DealerId
 from fsbo.config import settings
-from fsbo.config import settings as app_settings
 from fsbo.crm.response import mark_first_response, mark_inbound_received
 from fsbo.db import get_session
 from fsbo.messaging.email_client import send_email
@@ -206,7 +205,7 @@ async def send_email_to_seller(
         to=to,
         subject=payload.subject,
         text_body=payload.body,
-        from_address=app_settings.email_from or None,
+        from_address=settings.email_from or None,
     )
 
     msg = Message(
@@ -214,7 +213,7 @@ async def send_email_to_seller(
         lead_id=lead.id,
         direction="outbound",
         channel="email",
-        from_email=app_settings.email_from or None,
+        from_email=settings.email_from or None,
         to_email=to,
         subject=payload.subject[:256],
         body=payload.body,
@@ -303,6 +302,16 @@ async def twilio_inbound(
     Body: Annotated[str, Form()],
     MessageSid: Annotated[str, Form()],
 ) -> str:
+    # Idempotency: Twilio retries inbound webhooks aggressively. If we've
+    # already processed this MessageSid, no-op so we don't double-create
+    # Message rows, double-fire opt-outs, or double-mark inbound state.
+    if MessageSid and db.scalar(
+        select(Message.id).where(
+            Message.direction == "inbound", Message.twilio_sid == MessageSid
+        )
+    ):
+        return "<Response></Response>"
+
     # Route the inbound message to whichever lead has a matching seller_phone.
     # Multi-dealer matching is best-effort: we pick the most recent lead.
     clean = _digits(From)
@@ -503,6 +512,27 @@ async def inbound_email(
 
     mark_inbound_received(lead)
     lead.updated_at = datetime.now(timezone.utc)
+
+    # CTIA + state mini-TCPA require honoring opt-out keywords on any
+    # channel, not just SMS. Match against the seller's phone (when we
+    # have one on the listing) so subsequent outbound SMS / email /
+    # voice all refuse for that contact.
+    if is_stop_keyword(body_text) and listing and listing.seller_phone:
+        record_opt_out(
+            db,
+            dealer_id=lead.dealer_id,
+            phone=listing.seller_phone,
+            source="stop_keyword_email",
+            note=body_text[:128],
+        )
+        db.add(
+            Interaction(
+                lead_id=lead.id,
+                kind=InteractionKind.STATUS_CHANGE.value,
+                body=f"opted out via STOP keyword (email): {body_text[:80]}",
+                actor="system",
+            )
+        )
 
     # Same intent ladder as inbound SMS — auto-close on sold /
     # not_for_sale signals so dealers stop chasing dead leads.

@@ -258,8 +258,14 @@ async def stripe_webhook(
 ) -> dict[str, str]:
     """Verify the Stripe signature header and update local state."""
     if not settings.stripe_webhook_secret:
-        # In dev / CI we don't enforce — still 200 so Stripe's CLI tester
-        # doesn't blow up. Production deploy MUST set the secret.
+        # Production deploys must configure STRIPE_WEBHOOK_SECRET. An
+        # unsigned webhook in production lets anyone forge subscription
+        # events to flip plan state. We refuse with a 503 so missing
+        # config fails loudly instead of silently accepting forgeries.
+        if settings.env_mode == "production":
+            raise HTTPException(
+                503, "stripe webhook secret not configured"
+            )
         return {"ok": "1", "verified": "skipped"}
 
     payload = await request.body()

@@ -26,6 +26,7 @@ from fsbo.api.routes.routing import (
     assign_next,
 )
 from fsbo.crm.response import mark_first_response, mark_inbound_seen
+from fsbo.logging import get_logger
 from fsbo.messaging.assign_notify import notify_assignment
 from fsbo.messaging.tcpa import normalize_phone
 from fsbo.models import (
@@ -41,6 +42,7 @@ from fsbo.models import (
 )
 from fsbo.webhooks.delivery import enqueue_for_lead_status_change
 
+log = get_logger(__name__)
 router = APIRouter(tags=["crm"])
 
 
@@ -147,8 +149,10 @@ def create_lead(
     if assigned_to:
         try:
             notify_assignment(db, lead)
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as e:  # noqa: BLE001
+            log.warning(
+                "create_lead.notify_failed", lead_id=lead.id, error=str(e)[:160]
+            )
 
     return LeadOut.model_validate(lead)
 
@@ -241,8 +245,12 @@ def bulk_claim(
                 continue
             try:
                 notify_assignment(db, lead)
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception as e:  # noqa: BLE001
+                log.warning(
+                    "bulk_claim.notify_failed",
+                    lead_id=lead.id,
+                    error=str(e)[:160],
+                )
 
     return BulkClaimOut(
         claimed=len(to_claim),
@@ -327,8 +335,12 @@ def bulk_status_change(
         for lead, prev in changed_leads:
             try:
                 enqueue_for_lead_status_change(db, lead, prev)
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception as e:  # noqa: BLE001
+                log.warning(
+                    "bulk_status.webhook_enqueue_failed",
+                    lead_id=lead.id,
+                    error=str(e)[:160],
+                )
 
     return BulkLeadOpOut(updated=updated, skipped=skipped, not_found=missing)
 
@@ -374,8 +386,12 @@ def bulk_assign(
         for lead, prev in reassigned:
             try:
                 notify_assignment(db, lead, prev_owner=prev)
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception as e:  # noqa: BLE001
+                log.warning(
+                    "bulk_assign.notify_failed",
+                    lead_id=lead.id,
+                    error=str(e)[:160],
+                )
 
     return BulkLeadOpOut(updated=updated, skipped=skipped, not_found=missing)
 
@@ -708,7 +724,11 @@ async def import_leads_csv(
             ext_seed = f"phone:{normalize_phone(phone)}"
         else:
             ext_seed = f"email:{(email or '').lower()}"
-        ext_id = "csv-" + hashlib.sha1(ext_seed.encode()).hexdigest()[:16]
+        # 24 hex chars from sha256 = 96 bits of collision resistance.
+        # Birthday-paradox-safe out to ~2^48 imports across all dealers,
+        # vs the prior sha1[:16] which was only 64 bits and collision-
+        # prone at multi-million-listing scale.
+        ext_id = "csv-" + hashlib.sha256(ext_seed.encode()).hexdigest()[:24]
 
         # Build / find the listing.
         listing = db.scalar(

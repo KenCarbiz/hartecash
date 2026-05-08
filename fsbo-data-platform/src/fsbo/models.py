@@ -550,6 +550,13 @@ class Message(Base):
     __table_args__ = (
         Index("ix_messages_lead", "lead_id"),
         Index("ix_messages_twilio_sid", "twilio_sid"),
+        # Leaderboard counts outbound SMS per rep across a time window.
+        Index(
+            "ix_messages_dealer_dir_created",
+            "dealer_id",
+            "direction",
+            "created_at",
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -604,6 +611,9 @@ class Lead(Base):
     __table_args__ = (
         UniqueConstraint("dealer_id", "listing_id", name="uq_lead_dealer_listing"),
         Index("ix_leads_status", "status"),
+        # Hot composite for routing's least-loaded picker + leaderboard
+        # group-by-rep. Covers: WHERE dealer_id AND assigned_to GROUP BY assigned_to.
+        Index("ix_leads_dealer_assigned", "dealer_id", "assigned_to"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
