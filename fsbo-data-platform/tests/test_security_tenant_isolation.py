@@ -131,6 +131,8 @@ PROTECTED_ENDPOINTS: list[tuple[str, str, dict | None]] = [
     ("GET", "/tcpa/opt-outs", None),
     ("POST", "/tcpa/consents", {"phone": "8135551234", "consent_text": "yes"}),
     ("GET", "/tcpa/consents", None),
+    ("GET", "/tcpa/quiet-hours", None),
+    ("PUT", "/tcpa/quiet-hours", {"start": "09:00", "end": "18:00"}),
     # AI voice agent (dealer-scoped initiation + read; TwiML endpoints
     # are PUBLIC + signature-verified, NOT in this list)
     ("POST", "/voice/calls", {"lead_id": 1}),

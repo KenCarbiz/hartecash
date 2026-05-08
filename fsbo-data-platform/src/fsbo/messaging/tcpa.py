@@ -97,15 +97,41 @@ def _local_now(tz_name: str) -> datetime:
         return datetime.now(timezone.utc)
 
 
-def in_quiet_hours(zip_code: str | None, when: datetime | None = None) -> bool:
-    """True iff a send to this ZIP right now would be in quiet hours."""
+def _parse_hhmm(raw: str | None) -> time | None:
+    """Parse 'HH:MM' to a time. Returns None on malformed input so
+    callers fall back to federal defaults instead of raising."""
+    if not raw:
+        return None
+    try:
+        h, m = raw.split(":", 1)
+        return time(int(h), int(m))
+    except (ValueError, AttributeError):
+        return None
+
+
+def in_quiet_hours(
+    zip_code: str | None,
+    when: datetime | None = None,
+    *,
+    start: time | str | None = None,
+    end: time | str | None = None,
+) -> bool:
+    """True iff a send to this ZIP right now would be in quiet hours.
+
+    Optional `start` / `end` override the federal default 8 AM - 8 PM
+    window. Accepts either time() objects or 'HH:MM' strings (the
+    on-disk Dealer.quiet_hours_* format)."""
     tz_name = _tz_for_zip(zip_code)
     local = (
         when.astimezone(__import__("zoneinfo").ZoneInfo(tz_name))
         if when
         else _local_now(tz_name)
     )
-    return not (QUIET_HOURS_START <= local.time() < QUIET_HOURS_END)
+    start_t = _parse_hhmm(start) if isinstance(start, str) else start
+    end_t = _parse_hhmm(end) if isinstance(end, str) else end
+    start_t = start_t or QUIET_HOURS_START
+    end_t = end_t or QUIET_HOURS_END
+    return not (start_t <= local.time() < end_t)
 
 
 def normalize_phone(raw: str | None) -> str:
@@ -159,13 +185,28 @@ def check_send_allowed(
             detail=f"opted out via {opt_out.source}",
         )
 
-    # 2. Quiet hours.
-    if in_quiet_hours(zip_code):
+    # 2. Quiet hours. Dealer-level override (when set) takes precedence
+    # over the federal 8 AM - 8 PM default — used for dealerships that
+    # want a tighter window than law requires (e.g. 9 AM - 6 PM).
+    from fsbo.models import Dealer
+
+    qh_start: str | None = None
+    qh_end: str | None = None
+    dealer_row = db.scalar(select(Dealer).where(Dealer.slug == dealer_id))
+    if dealer_row:
+        qh_start = dealer_row.quiet_hours_start
+        qh_end = dealer_row.quiet_hours_end
+    if in_quiet_hours(zip_code, start=qh_start, end=qh_end):
         tz = _tz_for_zip(zip_code)
+        window = (
+            f"{qh_start or '8AM'}-{qh_end or '8PM'}"
+            if qh_start or qh_end
+            else "8AM-8PM"
+        )
         return TcpaCheckResult(
             allowed=False,
             blocked_reason="quiet_hours",
-            detail=f"outside 8AM-8PM {tz}",
+            detail=f"outside {window} {tz}",
         )
 
     # 3. Strict-consent mode.

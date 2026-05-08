@@ -664,6 +664,32 @@ export async function importLeadsCsv(file: File): Promise<ImportResult> {
   return (await res.json()) as ImportResult;
 }
 
+// ---------- TCPA quiet-hours override ----------
+
+export interface QuietHours {
+  start: string; // "HH:MM"
+  end: string;
+  is_override: boolean;
+}
+
+export async function getQuietHours(): Promise<QuietHours | null> {
+  const res = await apiFetch("/tcpa/quiet-hours");
+  if (!res.ok) return null;
+  return (await res.json()) as QuietHours;
+}
+
+export async function updateQuietHours(
+  start: string | null,
+  end: string | null,
+): Promise<QuietHours> {
+  const res = await apiFetch("/tcpa/quiet-hours", {
+    method: "PUT",
+    body: JSON.stringify({ start, end }),
+  });
+  if (!res.ok) throw new FsboApiError(`FSBO API ${res.status}`, res.status, await res.text());
+  return (await res.json()) as QuietHours;
+}
+
 // ---------- listing stats (days on market, price history) ----------
 
 export interface PriceHistoryPoint {

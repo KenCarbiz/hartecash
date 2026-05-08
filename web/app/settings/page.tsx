@@ -6,11 +6,13 @@ import { ExtensionInstallPanel } from "@/components/ExtensionInstallPanel";
 import { InvitationsPanel } from "@/components/InvitationsPanel";
 import { CsvImportPanel } from "@/components/CsvImportPanel";
 import { NotificationsPanel } from "@/components/NotificationsPanel";
+import { QuietHoursPanel } from "@/components/QuietHoursPanel";
 import { TemplatesPanel } from "@/components/TemplatesPanel";
 import {
   FsboApiError,
   getCurrentUser,
   getNotificationPrefs,
+  getQuietHours,
   getSubscription,
   listApiKeys,
   listInvitations,
@@ -36,6 +38,7 @@ export default async function SettingsPage() {
   const prefs = await getNotificationPrefs().catch(() => null);
   const templates = await listTemplates().catch(() => []);
   const subscription = await getSubscription().catch(() => null);
+  const quietHours = await getQuietHours().catch(() => null);
 
   // Build the app origin so we can render full invite URLs.
   const h = await headers();
@@ -82,6 +85,8 @@ export default async function SettingsPage() {
         <BillingPanel subscription={subscription} origin={appOrigin} />
 
         {prefs && <NotificationsPanel prefs={prefs} />}
+
+        {quietHours && <QuietHoursPanel quietHours={quietHours} />}
 
         <TemplatesPanel templates={templates} />
 

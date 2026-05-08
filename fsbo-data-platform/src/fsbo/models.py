@@ -295,6 +295,11 @@ class Dealer(Base):
     # GM dashboard via /analytics/group-funnel. Nullable — most
     # dealers are independent.
     group_id: Mapped[int | None] = mapped_column(Integer, index=True)
+    # TCPA quiet-hours override. Nullable -> use federal defaults
+    # (8 AM - 8 PM seller-local). Format is "HH:MM" 24-hour. Window
+    # is interpreted as start <= now < end.
+    quiet_hours_start: Mapped[str | None] = mapped_column(String(5))
+    quiet_hours_end: Mapped[str | None] = mapped_column(String(5))
 
 
 class DealerGroup(Base):

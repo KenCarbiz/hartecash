@@ -152,3 +152,103 @@ def list_consents(
         .limit(min(limit, 1000))
     ).all()
     return [ConsentOut.model_validate(r) for r in rows]
+
+
+# ---- Quiet-hours override ------------------------------------------
+
+
+import re
+
+_HHMM_RE = re.compile(r"^(?P<h>\d{1,2}):(?P<m>\d{2})$")
+
+
+def _validate_hhmm(raw: str | None) -> str | None:
+    """Round-trip 'HH:MM' to a normalized two-digit form ('08:30').
+    None / empty string passes through unchanged. Raises HTTPException
+    on malformed input."""
+    if raw is None or raw == "":
+        return None
+    m = _HHMM_RE.match(raw.strip())
+    if not m:
+        raise HTTPException(400, f"quiet-hours time must be HH:MM, got '{raw}'")
+    h = int(m.group("h"))
+    mm = int(m.group("m"))
+    if not (0 <= h <= 23 and 0 <= mm <= 59):
+        raise HTTPException(400, f"quiet-hours out of range: '{raw}'")
+    return f"{h:02d}:{mm:02d}"
+
+
+class QuietHoursOut(BaseModel):
+    """Federal default is 8 AM - 8 PM seller-local; the dealer can
+    tighten (not loosen) it via this endpoint."""
+
+    start: str
+    end: str
+    is_override: bool
+
+
+class QuietHoursPatch(BaseModel):
+    start: str | None = None
+    end: str | None = None
+
+
+@router.get("/quiet-hours", response_model=QuietHoursOut)
+def get_quiet_hours(
+    dealer_id: DealerId,
+    db: Annotated[Session, Depends(get_session)],
+) -> QuietHoursOut:
+    from fsbo.models import Dealer
+
+    row = db.scalar(select(Dealer).where(Dealer.slug == dealer_id))
+    start = (row.quiet_hours_start if row else None) or "08:00"
+    end = (row.quiet_hours_end if row else None) or "20:00"
+    is_override = bool(row and (row.quiet_hours_start or row.quiet_hours_end))
+    return QuietHoursOut(start=start, end=end, is_override=is_override)
+
+
+@router.put("/quiet-hours", response_model=QuietHoursOut)
+def update_quiet_hours(
+    payload: QuietHoursPatch,
+    dealer_id: DealerId,
+    db: Annotated[Session, Depends(get_session)],
+) -> QuietHoursOut:
+    """Tighten quiet-hours for this dealership.
+
+    Federal TCPA bans calls before 8 AM / after 9 PM. We default to
+    8 AM - 8 PM (one hour stricter on the late side). Dealers can
+    tighten to e.g. 9 AM - 6 PM but cannot loosen past federal: any
+    start < 08:00 or end > 20:00 is rejected so misconfiguration can't
+    create TCPA exposure.
+    """
+    from fsbo.models import Dealer
+
+    start_norm = _validate_hhmm(payload.start)
+    end_norm = _validate_hhmm(payload.end)
+
+    if start_norm is not None and start_norm < "08:00":
+        raise HTTPException(
+            400,
+            "start cannot be earlier than 08:00 — federal TCPA quiet-hours "
+            "begin at 8 AM seller-local",
+        )
+    if end_norm is not None and end_norm > "20:00":
+        raise HTTPException(
+            400,
+            "end cannot be later than 20:00 — federal TCPA quiet-hours "
+            "begin at 9 PM, we cap at 8 PM for safety",
+        )
+    if start_norm and end_norm and start_norm >= end_norm:
+        raise HTTPException(400, "start must be before end")
+
+    row = db.scalar(select(Dealer).where(Dealer.slug == dealer_id))
+    if not row:
+        raise HTTPException(404, "dealer not found")
+    row.quiet_hours_start = start_norm
+    row.quiet_hours_end = end_norm
+    db.flush()
+
+    return QuietHoursOut(
+        start=row.quiet_hours_start or "08:00",
+        end=row.quiet_hours_end or "20:00",
+        is_override=bool(row.quiet_hours_start or row.quiet_hours_end),
+    )
