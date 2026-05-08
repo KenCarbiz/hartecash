@@ -1,0 +1,40 @@
+{
+  "name": "AutoAcquisition",
+  "short_name": "AutoAcq",
+  "description": "Private-party vehicle acquisition for dealers",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f5f7fa",
+  "theme_color": "#0c2340",
+  "categories": ["business", "productivity"],
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Leads",
+      "short_name": "Leads",
+      "description": "Open the leads queue",
+      "url": "/leads"
+    },
+    {
+      "name": "Browse listings",
+      "short_name": "Listings",
+      "description": "Browse private-party listings",
+      "url": "/listings"
+    },
+    {
+      "name": "Analytics",
+      "short_name": "Analytics",
+      "description": "Funnel + per-rep leaderboard",
+      "url": "/analytics"
+    }
+  ]
+}

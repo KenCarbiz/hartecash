@@ -23,17 +23,23 @@
   .panel-header {
     @apply border-b border-ink-200 px-5 py-3;
   }
+  /* Buttons run a touch-friendly height (~44pt) on mobile, narrow to
+     desktop sizing from sm breakpoint up. Keeps tap targets accessible
+     without spacing out the dense desktop UI. */
   .btn-primary {
-    @apply inline-flex items-center gap-1.5 rounded-md bg-brand-600 px-3.5 py-1.5 text-sm font-medium text-white hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-50 disabled:opacity-50;
+    @apply inline-flex items-center gap-1.5 rounded-md bg-brand-600 px-3.5 py-2 sm:py-1.5 text-sm font-medium text-white hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-50 disabled:opacity-50;
   }
   .btn-secondary {
-    @apply inline-flex items-center gap-1.5 rounded-md border border-ink-300 bg-white px-3.5 py-1.5 text-sm font-medium text-ink-700 hover:bg-ink-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-50;
+    @apply inline-flex items-center gap-1.5 rounded-md border border-ink-300 bg-white px-3.5 py-2 sm:py-1.5 text-sm font-medium text-ink-700 hover:bg-ink-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-50;
   }
   .btn-ghost {
-    @apply inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium text-ink-600 hover:bg-ink-100 hover:text-ink-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-50;
+    @apply inline-flex items-center gap-1.5 rounded-md px-2.5 py-2 sm:py-1.5 text-sm font-medium text-ink-600 hover:bg-ink-100 hover:text-ink-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-ink-50;
   }
   .input {
-    @apply block w-full rounded-md border border-ink-300 bg-white px-3 py-1.5 text-sm text-ink-900 placeholder:text-ink-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500;
+    /* iOS Safari auto-zooms inputs <16px; bump to 16px on mobile so
+       focusing a field doesn't trigger a layout reflow. Narrow back to
+       14px from sm breakpoint up where the zoom doesn't apply. */
+    @apply block w-full rounded-md border border-ink-300 bg-white px-3 py-2 text-base sm:py-1.5 sm:text-sm text-ink-900 placeholder:text-ink-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500;
   }
   .label {
     @apply block text-[11px] font-medium uppercase tracking-wide text-ink-500;
