@@ -26,6 +26,7 @@ import {
   getListing,
   getListingStats,
   getMarketEstimate,
+  getNotificationPrefs,
   getVehicleFile,
   listInteractions,
   listOffersForLead,
@@ -107,6 +108,7 @@ export default async function ListingDetailPage({
     voiceCalls,
     historyReport,
     offers,
+    notifPrefs,
   ] = await Promise.all([
     lead ? listInteractions(lead.id).catch(() => []) : Promise.resolve([]),
     listTemplates().catch(() => []),
@@ -118,6 +120,7 @@ export default async function ListingDetailPage({
     lead ? listVoiceCalls(lead.id).catch(() => []) : Promise.resolve([]),
     getCachedHistoryReport(listingId).catch(() => null),
     lead ? listOffersForLead(lead.id).catch(() => []) : Promise.resolve([]),
+    getNotificationPrefs().catch(() => null),
   ]);
 
   // App origin so the OfferComposer can show the dealer the public
@@ -356,6 +359,7 @@ export default async function ListingDetailPage({
             listingId={listing.id}
             sellerPhone={listing.seller_phone}
             calls={voiceCalls}
+            defaultRepPhone={notifPrefs?.phone ?? null}
           />
           <OfferComposerPanel
             leadId={lead?.id ?? null}

@@ -228,6 +228,7 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
 export interface NotificationPreferences {
   alerts_enabled: boolean;
   alert_min_score: number;
+  phone?: string | null;
 }
 
 export async function getNotificationPrefs(): Promise<NotificationPreferences | null> {

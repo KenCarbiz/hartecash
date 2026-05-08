@@ -66,6 +66,22 @@ export function NotificationsPanel({
           </p>
         </label>
 
+        <label className="block max-w-xs">
+          <span className="label">Click-to-call phone</span>
+          <input
+            type="tel"
+            name="phone"
+            defaultValue={prefs.phone ?? ""}
+            placeholder="(813) 555-0100"
+            autoComplete="tel"
+            className="input mt-1"
+          />
+          <p className="mt-1 text-[11px] text-ink-500">
+            We dial this first when you click <em>Call now</em>; you pick
+            up and we bridge to the seller. Leave blank to disable.
+          </p>
+        </label>
+
         <div className="flex items-center gap-3">
           <button type="submit" disabled={pending} className="btn-primary">
             {pending ? "Saving…" : "Save"}

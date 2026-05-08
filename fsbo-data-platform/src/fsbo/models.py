@@ -454,6 +454,10 @@ class User(Base):
     # Notification preferences (see workers/lead_alerts_worker.py).
     alerts_enabled: Mapped[bool] = mapped_column(default=True, nullable=False)
     alert_min_score: Mapped[int] = mapped_column(Integer, default=80, nullable=False)
+    # Rep's mobile number — default for click-to-call bridge so they
+    # don't have to retype it. Stored server-side instead of the
+    # localStorage cache so it works across devices.
+    phone: Mapped[str | None] = mapped_column(String(32))
 
 
 class ApiKey(Base):

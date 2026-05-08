@@ -22,11 +22,13 @@ export function VoiceCallPanel({
   listingId,
   sellerPhone,
   calls,
+  defaultRepPhone = null,
 }: {
   leadId: number | null;
   listingId: number;
   sellerPhone: string | null;
   calls: VoiceCall[];
+  defaultRepPhone?: string | null;
 }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -105,7 +107,11 @@ export function VoiceCallPanel({
         </div>
 
         {leadId && sellerPhone && (
-          <BridgeCallForm leadId={leadId} listingId={listingId} />
+          <BridgeCallForm
+            leadId={leadId}
+            listingId={listingId}
+            defaultRepPhone={defaultRepPhone}
+          />
         )}
 
         {latest && <LatestCallView call={latest} />}
@@ -339,24 +345,28 @@ function FlagRow({ label, items }: { label: string; items: string[] }) {
 function BridgeCallForm({
   leadId,
   listingId,
+  defaultRepPhone = null,
 }: {
   leadId: number;
   listingId: number;
+  defaultRepPhone?: string | null;
 }) {
   const [pending, startTransition] = useTransition();
-  const [repPhone, setRepPhone] = useState("");
+  const [repPhone, setRepPhone] = useState(defaultRepPhone ?? "");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  // Remember the rep's phone across sessions so they don't retype it.
+  // Server-side User.phone is the source of truth; localStorage is a
+  // fallback for legacy users who haven't saved one to their profile yet.
   useEffect(() => {
+    if (defaultRepPhone) return;
     try {
       const saved = localStorage.getItem("aa.rep_phone");
       if (saved) setRepPhone(saved);
     } catch {
       /* ignore (Safari private mode etc.) */
     }
-  }, []);
+  }, [defaultRepPhone]);
 
   const onSubmit = (formData: FormData) => {
     setError(null);

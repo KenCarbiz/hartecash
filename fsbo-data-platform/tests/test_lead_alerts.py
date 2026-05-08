@@ -46,6 +46,26 @@ def test_preferences_require_auth(client):
     assert r.status_code == 401
 
 
+def test_preferences_phone_round_trips(client):
+    _register(client, email="phone@example.com")
+    body = client.get("/notifications/preferences").json()
+    assert body["phone"] is None
+
+    patch = client.patch(
+        "/notifications/preferences",
+        json={"phone": "(813) 555-7777"},
+    )
+    assert patch.status_code == 200
+    assert patch.json()["phone"] == "(813) 555-7777"
+
+    # Cleared via empty string.
+    cleared = client.patch(
+        "/notifications/preferences",
+        json={"phone": ""},
+    )
+    assert cleared.json()["phone"] is None
+
+
 # ---- Lead alerts worker ----
 
 

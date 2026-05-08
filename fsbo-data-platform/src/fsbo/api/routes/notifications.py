@@ -16,11 +16,13 @@ router = APIRouter(prefix="/notifications", tags=["notifications"])
 class PreferencesOut(BaseModel):
     alerts_enabled: bool
     alert_min_score: int
+    phone: str | None = None
 
 
 class PreferencesPatch(BaseModel):
     alerts_enabled: bool | None = None
     alert_min_score: int | None = Field(None, ge=0, le=100)
+    phone: str | None = Field(None, max_length=32)
 
 
 def _current_user(request: Request, db: Session) -> User:
@@ -43,6 +45,7 @@ def get_preferences(
     return PreferencesOut(
         alerts_enabled=user.alerts_enabled,
         alert_min_score=user.alert_min_score,
+        phone=user.phone,
     )
 
 
@@ -57,8 +60,12 @@ def patch_preferences(
         user.alerts_enabled = payload.alerts_enabled
     if payload.alert_min_score is not None:
         user.alert_min_score = payload.alert_min_score
+    if payload.phone is not None:
+        # Empty string clears the saved phone.
+        user.phone = payload.phone.strip() or None
     db.flush()
     return PreferencesOut(
         alerts_enabled=user.alerts_enabled,
         alert_min_score=user.alert_min_score,
+        phone=user.phone,
     )
