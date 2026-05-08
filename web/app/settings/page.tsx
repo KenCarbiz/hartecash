@@ -4,6 +4,7 @@ import { ApiKeysPanel } from "@/components/ApiKeysPanel";
 import { BillingPanel } from "@/components/BillingPanel";
 import { ExtensionInstallPanel } from "@/components/ExtensionInstallPanel";
 import { InvitationsPanel } from "@/components/InvitationsPanel";
+import { CsvImportPanel } from "@/components/CsvImportPanel";
 import { NotificationsPanel } from "@/components/NotificationsPanel";
 import { TemplatesPanel } from "@/components/TemplatesPanel";
 import {
@@ -83,6 +84,8 @@ export default async function SettingsPage() {
         {prefs && <NotificationsPanel prefs={prefs} />}
 
         <TemplatesPanel templates={templates} />
+
+        <CsvImportPanel />
 
         <ExtensionInstallPanel />
 

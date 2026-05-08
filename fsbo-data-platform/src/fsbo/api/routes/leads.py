@@ -11,7 +11,7 @@ from collections.abc import Iterator
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import and_, func, select
@@ -531,6 +531,257 @@ def export_leads_csv(
         _iter(),
         media_type="text/csv",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ---------- CSV import (dealer migration: VAN / Frazer / generic) ---------
+
+
+class ImportRowError(BaseModel):
+    row: int
+    error: str
+
+
+class ImportResult(BaseModel):
+    imported: int
+    skipped_duplicates: int
+    errors: list[ImportRowError]
+
+
+# Header aliases — left side is the canonical key, right side is every
+# header variant we'll accept (case-insensitive). Covers VAN, Frazer,
+# DealerSocket, and the generic "what people put in spreadsheets".
+_HEADER_ALIASES: dict[str, tuple[str, ...]] = {
+    "phone": ("phone", "seller_phone", "seller phone", "mobile", "cell", "cell phone"),
+    "email": ("email", "seller_email", "seller email", "e-mail"),
+    "year": ("year", "vehicle_year", "yr"),
+    "make": ("make", "vehicle_make"),
+    "model": ("model", "vehicle_model"),
+    "vin": ("vin",),
+    "price": ("price", "asking_price", "asking price", "list_price"),
+    "mileage": ("mileage", "miles", "odometer"),
+    "city": ("city",),
+    "state": ("state", "st"),
+    "zip": ("zip", "zip_code", "zipcode", "postal_code"),
+    "notes": ("notes", "comment", "comments"),
+    "assigned_to": ("assigned_to", "assigned to", "owner", "rep", "buyer"),
+    "status": ("status", "lead_status", "stage"),
+    "title": ("title", "vehicle", "description"),
+    "url": ("url", "listing_url", "link", "source_url"),
+}
+
+_VALID_STATUSES: set[str] = {s.value for s in LeadStatus}
+
+
+def _normalize_header(raw: str) -> str | None:
+    """Map a CSV header to one of our canonical keys. Returns None if
+    the header doesn't match any alias (we just ignore unknown columns).
+
+    Whitespace and underscores are interchangeable so `Vehicle Year`,
+    `vehicle_year`, and `vehicle year` all collapse to the same key."""
+    cleaned = (raw or "").strip().lower().replace(" ", "_")
+    if not cleaned:
+        return None
+    for canonical, aliases in _HEADER_ALIASES.items():
+        if cleaned in (a.replace(" ", "_") for a in aliases):
+            return canonical
+    return None
+
+
+def _digits10(phone: str | None) -> str:
+    if not phone:
+        return ""
+    return "".join(c for c in phone if c.isdigit())[-10:]
+
+
+def _row_int(row: dict[str, str], key: str) -> int | None:
+    raw = (row.get(key) or "").strip()
+    if not raw:
+        return None
+    try:
+        # Tolerant of "$18,500" -> 18500 and "120,000 mi" -> 120000.
+        cleaned = "".join(c for c in raw if c.isdigit())
+        return int(cleaned) if cleaned else None
+    except ValueError:
+        return None
+
+
+@router.post("/leads/import.csv", response_model=ImportResult)
+async def import_leads_csv(
+    request: Request,
+    dealer_id: DealerId,
+    db: Annotated[Session, Depends(get_session)],
+) -> ImportResult:
+    """Bulk-import leads from a dealer's prior CRM export.
+
+    Accepts multipart/form-data with a single 'file' field OR a raw
+    text/csv body. Header row required; columns are matched
+    case-insensitively against a permissive alias list (VAN, Frazer,
+    DealerSocket, and generic spreadsheet conventions all work).
+
+    Each row must have at least a phone OR email so we can match against
+    inbound replies later. Listings are upsert by (dealer, source,
+    external_id) where external_id is a stable hash of the contact info,
+    so re-uploading the same CSV doesn't duplicate. Leads are dedup'd by
+    the existing (dealer, listing) unique constraint.
+
+    Capped at 5000 rows per request to keep the transaction bounded.
+    """
+    # Pull the bytes from either multipart or raw body.
+    content_type = (request.headers.get("content-type") or "").lower()
+    if "multipart" in content_type:
+        form = await request.form()
+        upload = form.get("file")
+        if upload is None or not hasattr(upload, "read"):
+            raise HTTPException(400, "missing 'file' field")
+        raw = await upload.read()  # type: ignore[union-attr]
+    else:
+        raw = await request.body()
+
+    if not raw:
+        raise HTTPException(400, "empty body")
+    if len(raw) > 5_000_000:
+        raise HTTPException(413, "csv too large; cap is 5 MB")
+
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        text = raw.decode("latin-1", errors="replace")
+
+    reader = csv.reader(io.StringIO(text))
+    try:
+        header_row = next(reader)
+    except StopIteration:
+        raise HTTPException(400, "csv has no header row") from None
+
+    # Build a column-index -> canonical-key map; unknown columns are
+    # silently dropped.
+    col_map: dict[int, str] = {}
+    for idx, raw_header in enumerate(header_row):
+        canonical = _normalize_header(raw_header)
+        if canonical:
+            col_map[idx] = canonical
+    if not col_map:
+        raise HTTPException(
+            400,
+            "no recognized columns; need at least one of: "
+            "phone, email, vin, year/make/model",
+        )
+
+    imported = 0
+    skipped = 0
+    errors: list[ImportRowError] = []
+    MAX_ROWS = 5000
+
+    import hashlib
+
+    for line_num, raw_row in enumerate(reader, start=2):
+        if line_num - 1 > MAX_ROWS:
+            errors.append(
+                ImportRowError(
+                    row=line_num,
+                    error=f"row cap of {MAX_ROWS} exceeded; rest skipped",
+                )
+            )
+            break
+
+        row = {col_map[i]: (raw_row[i] if i < len(raw_row) else "") for i in col_map}
+
+        phone = (row.get("phone") or "").strip() or None
+        email = (row.get("email") or "").strip() or None
+        vin = (row.get("vin") or "").strip().upper() or None
+
+        if not phone and not email and not vin:
+            errors.append(
+                ImportRowError(
+                    row=line_num,
+                    error="missing phone, email, and vin — can't identify seller",
+                )
+            )
+            continue
+
+        # Stable external_id so re-imports dedupe deterministically.
+        # Order matters: vin > phone > email so we don't split rows
+        # that have multiple identifiers.
+        if vin:
+            ext_seed = f"vin:{vin}"
+        elif phone:
+            ext_seed = f"phone:{_digits10(phone)}"
+        else:
+            ext_seed = f"email:{(email or '').lower()}"
+        ext_id = "csv-" + hashlib.sha1(ext_seed.encode()).hexdigest()[:16]
+
+        # Build / find the listing.
+        listing = db.scalar(
+            select(Listing).where(
+                Listing.source == "csv_import",
+                Listing.external_id == ext_id,
+            )
+        )
+        if listing is None:
+            year = _row_int(row, "year")
+            mileage = _row_int(row, "mileage")
+            price = _row_int(row, "price")
+            title = (row.get("title") or "").strip() or " ".join(
+                x
+                for x in [
+                    str(year) if year else "",
+                    (row.get("make") or "").strip(),
+                    (row.get("model") or "").strip(),
+                ]
+                if x
+            ).strip() or "(imported)"
+            listing = Listing(
+                source="csv_import",
+                external_id=ext_id,
+                url=(row.get("url") or "").strip()
+                or f"csv-import:{ext_id}",
+                title=title[:256],
+                year=year,
+                make=(row.get("make") or "").strip() or None,
+                model=(row.get("model") or "").strip() or None,
+                vin=vin,
+                price=price,
+                mileage=mileage,
+                city=(row.get("city") or "").strip() or None,
+                state=(row.get("state") or "").strip() or None,
+                zip_code=(row.get("zip") or "").strip() or None,
+                seller_phone=phone,
+                seller_email=email,
+                classification="private_seller",
+            )
+            db.add(listing)
+            db.flush()
+
+        # Upsert the lead within this dealer.
+        existing_lead = db.scalar(
+            select(Lead).where(
+                and_(Lead.dealer_id == dealer_id, Lead.listing_id == listing.id)
+            )
+        )
+        if existing_lead is not None:
+            skipped += 1
+            continue
+
+        status_raw = (row.get("status") or "").strip().lower().replace(" ", "_")
+        status = status_raw if status_raw in _VALID_STATUSES else "new"
+
+        lead = Lead(
+            dealer_id=dealer_id,
+            listing_id=listing.id,
+            assigned_to=(row.get("assigned_to") or "").strip() or None,
+            status=status,
+            notes=(row.get("notes") or "").strip() or None,
+        )
+        db.add(lead)
+        imported += 1
+
+    db.flush()
+
+    return ImportResult(
+        imported=imported,
+        skipped_duplicates=skipped,
+        errors=errors,
     )
 
 

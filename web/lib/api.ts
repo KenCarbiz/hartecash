@@ -640,6 +640,30 @@ export async function bulkLeadArchive(
   return (await res.json()) as BulkLeadOpResult;
 }
 
+// ---------- CSV import (dealer migration) ----------
+
+export interface ImportRowError {
+  row: number;
+  error: string;
+}
+
+export interface ImportResult {
+  imported: number;
+  skipped_duplicates: number;
+  errors: ImportRowError[];
+}
+
+export async function importLeadsCsv(file: File): Promise<ImportResult> {
+  const fd = new FormData();
+  fd.append("file", file);
+  const res = await apiFetch("/leads/import.csv", {
+    method: "POST",
+    body: fd,
+  });
+  if (!res.ok) throw new FsboApiError(`FSBO API ${res.status}`, res.status, await res.text());
+  return (await res.json()) as ImportResult;
+}
+
 // ---------- listing stats (days on market, price history) ----------
 
 export interface PriceHistoryPoint {

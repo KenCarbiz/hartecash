@@ -50,6 +50,8 @@ PROTECTED_ENDPOINTS: list[tuple[str, str, dict | None]] = [
     ("POST", "/leads/bulk-archive", {"lead_ids": [1]}),
     ("GET", "/leads/teammates", None),
     ("GET", "/leads/export.csv", None),
+    # CSV import (dealer migration)
+    ("POST", "/leads/import.csv", None),
     # Messages
     ("POST", "/messages/send", {"lead_id": 1, "body": "hi"}),
     (
