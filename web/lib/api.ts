@@ -596,6 +596,50 @@ export async function bulkClaim(
   return await res.json();
 }
 
+// ---------- bulk lead ops (status / assign / archive) ----------
+
+export interface BulkLeadOpResult {
+  updated: number;
+  skipped: number;
+  not_found: number[];
+}
+
+export async function bulkLeadStatus(
+  leadIds: number[],
+  status: LeadStatus,
+): Promise<BulkLeadOpResult> {
+  const res = await apiFetch("/leads/bulk-status", {
+    method: "POST",
+    body: JSON.stringify({ lead_ids: leadIds, status }),
+  });
+  if (!res.ok) throw new FsboApiError(`FSBO API ${res.status}`, res.status, await res.text());
+  return (await res.json()) as BulkLeadOpResult;
+}
+
+export async function bulkLeadAssign(
+  leadIds: number[],
+  assignedTo: string | null,
+): Promise<BulkLeadOpResult> {
+  const res = await apiFetch("/leads/bulk-assign", {
+    method: "POST",
+    body: JSON.stringify({ lead_ids: leadIds, assigned_to: assignedTo }),
+  });
+  if (!res.ok) throw new FsboApiError(`FSBO API ${res.status}`, res.status, await res.text());
+  return (await res.json()) as BulkLeadOpResult;
+}
+
+export async function bulkLeadArchive(
+  leadIds: number[],
+  reason?: string,
+): Promise<BulkLeadOpResult> {
+  const res = await apiFetch("/leads/bulk-archive", {
+    method: "POST",
+    body: JSON.stringify({ lead_ids: leadIds, reason: reason ?? null }),
+  });
+  if (!res.ok) throw new FsboApiError(`FSBO API ${res.status}`, res.status, await res.text());
+  return (await res.json()) as BulkLeadOpResult;
+}
+
 // ---------- listing stats (days on market, price history) ----------
 
 export interface PriceHistoryPoint {
